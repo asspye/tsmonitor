@@ -1,0 +1,10 @@
+interface: "172.22.2.154"
+metrics_port: 9090
+timeout: 10s
+
+streams:
+  - url: "233.198.134.1:3333"
+    description: "Example Stream 1| Provider| HD| multicast| ID001"
+  
+  - url: "233.198.134.2:3333"
+    description: "Example Stream 2| Provider| SD| multicast| ID002"
