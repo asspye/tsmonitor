@@ -1,0 +1,17 @@
+[Unit]
+Description=TSMonitor - MPEG-TS Stream Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=asspye
+Group=asspye
+WorkingDirectory=/home/asspye/tsmonitor
+ExecStart=/home/asspye/tsmonitor/bin/tsmonitor /home/asspye/tsmonitor/config.yaml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
