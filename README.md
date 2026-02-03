@@ -82,7 +82,7 @@ sudo apt-get install tsduck
 
 ### 2. Clone and Build
 ```bash
-git clone https://github.com/YOUR_USERNAME/tsmonitor.git
+git clone https://github.com/asspye/tsmonitor.git
 cd tsmonitor
 
 # Build
