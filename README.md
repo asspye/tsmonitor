@@ -245,9 +245,6 @@ curl http://localhost:9090/metrics
 ./bin/test_streaming
 ```
 
-## 📄 License
-
-Private Project - All Rights Reserved
 
 ## 👥 Authors
 
