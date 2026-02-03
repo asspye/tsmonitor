@@ -79,6 +79,7 @@ TSMonitor is a high-performance Go application that monitors MPEG-TS multicast s
 sudo apt-get update
 sudo apt-get install tsduck
 ```
+or install from site https://tsduck.io/docs/tsduck.html#_installing_tsduck
 
 ### 2. Clone and Build
 ```bash
