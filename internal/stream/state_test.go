@@ -375,3 +375,70 @@ func TestResolutionSticky(t *testing.T) {
 		t.Errorf("change = %v", ch)
 	}
 }
+
+// WFC 239.200.200.52: ~3 с данных, ~21 с тишины, цикл 24 с
+func TestFlappingCollapsed(t *testing.T) {
+	s := New("x", "x", 5*time.Second)
+	log := &memLog{}
+	t0 := s.created
+	at := func(sec int) time.Time { return t0.Add(time.Duration(sec) * time.Second) }
+
+	// 2 минуты нормальной работы
+	sec := 0
+	for ; sec < 120; sec++ {
+		if sec%5 == 0 {
+			s.HandleLine(report(1000, pidVideo), at(sec), log)
+		}
+		s.CheckStatus(at(sec), log)
+	}
+	// 30 минут флаппинга: отчёт только в первые 3 с каждого 24-секундного цикла,
+	// и каждый возврат начинается с разрыва CC
+	for ; sec < 120+30*60; sec++ {
+		if (sec-120)%24 == 0 {
+			s.HandleLine(report(1000, pidVideoCC), at(sec), log)
+		}
+		s.CheckStatus(at(sec), log)
+	}
+	if n := len(log.kinds(KindStreamDown)); n != 2 {
+		t.Errorf("stream_down before flapping = %d, want 2", n)
+	}
+	if n := len(log.kinds(KindStreamUp)); n != 2 {
+		t.Errorf("stream_up before flapping = %d, want 2", n)
+	}
+	fl := log.kinds(KindStreamFlapping)
+	if len(fl) != 1 || fl[0]["period_s"].(float64) < 23 || fl[0]["period_s"].(float64) > 25 {
+		t.Fatalf("flapping = %v", fl)
+	}
+	// до признания флаппинга — 3 полные серии (start + end), дальше ничего
+	if n := len(log.kinds(KindCCErrors)); n != 6 {
+		t.Errorf("cc_errors: got %d events, want 6 (3 bursts before flapping, none after)", n)
+	}
+	snap := s.Snapshot(at(sec), true)
+	if snap.CCErrors["0x0100"] < 70*7 {
+		t.Errorf("cc metric must still count while flapping: %v", snap.CCErrors["0x0100"])
+	}
+	if !snap.Flapping || snap.Downs < 70 {
+		t.Errorf("snapshot flapping=%v downs=%v", snap.Flapping, snap.Downs)
+	}
+	// Снова ровно: через 10 минут — stream_stable
+	for end := sec + 11*60; sec < end; sec++ {
+		if sec%5 == 0 {
+			s.HandleLine(report(1000, pidVideo), at(sec), log)
+		}
+		s.CheckStatus(at(sec), log)
+	}
+	st := log.kinds(KindStreamStable)
+	if len(st) != 1 || st[0]["state"] != "online" {
+		t.Fatalf("stable = %v", st)
+	}
+	if fs := st[0]["flapping_s"].(float64); fs < 29*60 || fs > 31*60 {
+		t.Errorf("flapping_s = %v, want ~30 min (without the stable tail)", fs)
+	}
+	if s.Snapshot(at(sec), true).Flapping {
+		t.Error("flapping must end")
+	}
+	if n := len(log.kinds(KindStreamDown)) + len(log.kinds(KindStreamUp)); n != 4 {
+		t.Errorf("no down/up must be logged while flapping, got %d", n)
+	}
+	t.Log(fl[0]["message"], "/", st[0]["message"])
+}

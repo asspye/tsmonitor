@@ -41,6 +41,8 @@ type Snapshot struct {
 
 	Restarts    float64
 	ParseErrors float64
+	Downs       float64 // переходов online → offline
+	Flapping    bool
 
 	SCTE SCTESnapshot
 }
@@ -76,6 +78,8 @@ func (s *State) Snapshot(now time.Time, pcrMonitored bool) Snapshot {
 		PCRMaxUS:        s.pcrMaxLast,
 		PCRMonitored:    pcrMonitored,
 		Restarts:        s.restarts,
+		Downs:           s.downs,
+		Flapping:        s.flap.active,
 		ParseErrors:     s.parseErr,
 		Services:        append([]Service(nil), s.services...),
 	}

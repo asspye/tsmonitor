@@ -138,7 +138,8 @@ DS_VAR = {"name": "DS_PROMETHEUS", "label": "Data Source", "type": "datasource",
 STATUS_MAPPINGS = [{"type": "value", "options": {
     "0": {"text": "OFFLINE", "color": "red", "index": 0},
     "1": {"text": "ONLINE", "color": "green", "index": 1},
-    "2": {"text": "CC ERR", "color": "orange", "index": 2}}}]
+    "2": {"text": "CC ERR", "color": "orange", "index": 2},
+    "3": {"text": "НЕСТАБ", "color": "purple", "index": 3}}}]
 
 # Сводка одного события для журнала: сложные (CC, смена PID/сервиса) — строкой JSON целиком
 EVENT_LINE = (
@@ -161,8 +162,9 @@ def details():
     s = 'stream="$stream"'
     P = []
     # --- Плитки ---
-    P.append(stat("Статус", 0, 0, 3, 4, [prom(f"ts_stream_status{{{s}}}")],
-                  steps=[("red", None), ("green", 1)], mappings=STATUS_MAPPINGS))
+    P.append(stat("Статус", 0, 0, 3, 4, [prom(f"(3 * (ts_stream_flapping{{{s}}} == 1)) or ts_stream_status{{{s}}}")],
+                  steps=[("red", None), ("green", 1), ("purple", 3)], mappings=STATUS_MAPPINGS,
+                  desc="НЕСТАБ — поток пропадает и возвращается 3+ раза за 10 минут"))
     P.append(stat("Битрейт TS", 3, 0, 3, 4, [prom(f'ts_stream_bitrate_bps{{{s},type="total"}}')], "bps",
                   steps=[("blue", None)]))
     P.append(stat("Битрейт net", 6, 0, 3, 4, [prom(f'ts_stream_bitrate_bps{{{s},type="net"}}')], "bps",
@@ -201,18 +203,33 @@ def details():
         overrides=[override("Битрейт", ("unit", "bps"))], sort=("PID", False)))
     tbl = panel("bargauge", "Интервалы таблиц PSI/SI (max за 5 с)", 14, 4, 10, 11,
                 [prom(f'ts_stream_table_interval_seconds{{{s},stat="max"}}', "{{table}}", instant=True)], "s",
-                desc="Наибольший интервал повторения за последний отчёт. ETR 290: PAT, PMT, CAT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с")
+                desc="Наибольший интервал повторения за последний отчёт. ETR 290: PAT, PMT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с. "
+                     "Для CAT нормы интервала нет")
     tbl["fieldConfig"]["defaults"]["thresholds"] = thresholds(("green", None), ("red", 0.5))
     tbl["fieldConfig"]["defaults"]["min"] = 0
     tbl["fieldConfig"]["overrides"] = [
         override("SDT", ("thresholds", thresholds(("green", None), ("red", 2)))),
         override("NIT", ("thresholds", thresholds(("green", None), ("red", 10)))),
+        override("CAT", ("thresholds", thresholds(("green", None)))),
     ]
     tbl["options"] = {"displayMode": "basic", "orientation": "horizontal", "showUnfilled": True,
                       "valueMode": "color", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}}
     P.append(tbl)
 
     y = 15
+    st = panel("state-timeline", "Статус потока", 0, y, 20, 4, [prom(f"ts_stream_status{{{s}}}", "статус")],
+               desc="Online / offline во времени (offline — нет отчёта analyze 15 с или нулевой битрейт)")
+    st["fieldConfig"]["defaults"]["mappings"] = [{"type": "value", "options": {
+        "0": {"text": "offline", "color": "red", "index": 0},
+        "1": {"text": "online", "color": "green", "index": 1}}}]
+    st["options"] = {"showValue": "never", "mergeValues": True, "rowHeight": 0.8, "legend": {"showLegend": False}}
+    P.append(st)
+    P.append(stat("Пропаданий за период", 20, y, 4, 4,
+                  [prom(f"sum(increase(ts_stream_down_total{{{s}}}[$__range]))", instant=True)],
+                  steps=[("green", None), ("orange", 1), ("purple", 3)], decimals=0,
+                  desc="Переходов online → offline за выбранный период"))
+    y += 4
+
     P.append(row("Битрейт", y)); y += 1
     P.append(timeseries("Битрейт потока", 0, y, 12, 8, [
         prom(f'ts_stream_bitrate_bps{{{s},type="total"}}', "TS", "A"),
@@ -252,7 +269,7 @@ def details():
     P.append(row("Таблицы PSI/SI", y)); y += 1
     P.append(timeseries("Интервал повторения таблиц (max)", 0, y, 24, 7, [prom(
         f'ts_stream_table_interval_seconds{{{s},stat="max"}}', "{{table}}")], "s",
-        desc="ETR 290: PAT, PMT, CAT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с"))
+        desc="ETR 290: PAT, PMT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с. Для CAT нормы интервала нет"))
     y += 7
 
     P.append(row("Реклама SCTE-35", y)); y += 1
@@ -277,8 +294,10 @@ def details():
                   desc="За сколько до начала блока пришла метка (pre-roll последнего события out)"))
     P.append(stat("Последняя SCTE-35", 21, y, 3, 5,
                   [prom(f"time() - ts_stream_scte35_last_command_timestamp_seconds{{{s}}}")], "s",
-                  steps=[("green", None), ("orange", 30), ("red", 300)],
-                  desc="Сколько секунд назад приходила любая секция SCTE-35 (включая splice_null). Растёт — вставщик молчит"))
+                  steps=[("blue", None)],
+                  desc="Сколько времени назад приходила любая метка SCTE-35. Если вставщик шлёт пустые метки splice_null "
+                       "(значение обычно меньше секунды), рост значит, что он замолчал. Если не шлёт (например, СТС), "
+                       "это просто время с последней рекламной метки"))
     y += 5
 
     P.append(row("Журнал событий (Loki)", y)); y += 1
@@ -334,6 +353,7 @@ def overview():
         prom(f"count(ts_stream_status{{{JOB}}} == 0) or vector(0)", "Offline", "C"),
         prom(f"count(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])) > 0) or vector(0)",
              "С CC-ошибками (5 мин)", "D"),
+        prom(f"count(ts_stream_flapping{{{JOB}}} == 1) or vector(0)", "Нестабильные", "G"),
         prom(f"count(ts_stream_scte35_break_active{{{JOB}}} == 1) or vector(0)", "Идёт реклама", "E"),
         prom("sum(increase(ts_host_udp_rcvbuf_errors_total[5m])) or vector(0)", "UDP-потери на сервере (5 мин)", "F"),
     ], text_mode="value_and_name", steps=[("blue", None)]))
@@ -341,6 +361,8 @@ def overview():
         override("Online", ("color", {"mode": "fixed", "fixedColor": "green"})),
         override("Offline", ("thresholds", thresholds(("green", None), ("red", 1)))),
         override("С CC-ошибками (5 мин)", ("thresholds", thresholds(("green", None), ("orange", 1)))),
+        override("Нестабильные", ("thresholds", thresholds(("green", None), ("purple", 1))),
+                 ("description", "Потоки, которые пропадают и возвращаются 3+ раза за 10 минут")),
         override("UDP-потери на сервере (5 мин)", ("thresholds", thresholds(("green", None), ("red", 1))),
                  ("decimals", 0),
                  ("description", "Датаграммы, выброшенные ядром 192.168.1.26 из-за переполнения буфера сокета — "
@@ -349,12 +371,15 @@ def overview():
 
     # Мозаика: 0 OFFLINE, 1 ONLINE, 2 — online, но были CC-ошибки за 5 минут
     mosaic = stat("🟩 Статус TS потоков — КЛИКНИТЕ НА КВАДРАТ для деталей", 0, 3, 24, 16, [prom(
-        f"(ts_stream_status{{{JOB}}} + on(stream) group_left() "
+        f"(3 * (ts_stream_flapping{{{JOB}}} == 1)) "
+        f"or (ts_stream_status{{{JOB}}} + on(stream) group_left() "
         f"clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])), 1)) "
         f"or ts_stream_status{{{JOB}}}",
         "{{description}} | {{stream}}")],
-        steps=[("red", None), ("green", 1), ("orange", 2)], mappings=STATUS_MAPPINGS, text_mode="value_and_name",
-        desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, красный — offline")
+        steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3)], mappings=STATUS_MAPPINGS,
+        text_mode="value_and_name",
+        desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, "
+             "то возвращается (3+ раза за 10 мин), красный — offline")
     mosaic["fieldConfig"]["defaults"]["links"] = [{
         "title": "${__field.labels.description}", "targetBlank": False,
         "url": "/d/ts-stream-details?var-stream=${__field.labels.stream}"
@@ -383,8 +408,11 @@ def overview():
              instant=True, fmt="table"),
         prom(f'max by (stream, description) (ts_stream_iat_seconds{{{sel},stat="max"}})', ref="E",
              instant=True, fmt="table"),
+        prom(f"sum by (stream, description) (increase(ts_stream_down_total{{{sel}}}[1h]))", ref="F",
+             instant=True, fmt="table"),
     ], rename={"description": "Канал", "stream": "IP:Port", "Value #A": "CC", "Value #B": "TEI",
-               "Value #C": "PCR > 5 мс", "Value #D": "IAT std.dev", "Value #E": "IAT max"},
+               "Value #C": "PCR > 5 мс", "Value #D": "IAT std.dev", "Value #E": "IAT max",
+               "Value #F": "Пропаданий"},
         transformations=[
             {"id": "merge", "options": {}},
             {"id": "filterByValue", "options": {"type": "include", "match": "any", "filters": [
@@ -392,18 +420,22 @@ def overview():
                 {"fieldName": "Value #B", "config": {"id": "greater", "options": {"value": 0}}},
                 {"fieldName": "Value #C", "config": {"id": "greater", "options": {"value": 0}}},
                 {"fieldName": "Value #D", "config": {"id": "greater", "options": {"value": 0.002}}},
+                {"fieldName": "Value #F", "config": {"id": "greater", "options": {"value": 0.5}}},
             ]}},
         ],
         overrides=[stream_link_override(),
                    override("CC", ("decimals", 0), ("custom.cellOptions", {"type": "color-text"}),
                             ("thresholds", thresholds(("text", None), ("orange", 1), ("red", 100)))),
                    override("TEI", ("decimals", 0)),
+                   override("Пропаданий", ("decimals", 0), ("custom.cellOptions", {"type": "color-text"}),
+                            ("thresholds", thresholds(("text", None), ("purple", 1)))),
                    override("PCR > 5 мс", ("decimals", 0)),
                    override("IAT std.dev", ("unit", "s"), ("custom.cellOptions", {"type": "color-text"}),
                             ("thresholds", thresholds(("text", None), ("orange", 0.002), ("red", 0.01)))),
                    override("IAT max", ("unit", "s"))],
         sort=("CC", True),
-        desc="Потоки с CC-ошибками, TEI или превышениями PCR за час, либо с IAT std.dev > 2 мс. Клик по IP:Port — страница потока")
+        desc="Потоки с CC-ошибками, TEI, превышениями PCR или пропаданиями за час, либо с IAT std.dev > 2 мс. "
+             "Клик по IP:Port — страница потока")
     P.append(problems)
     P.append(table("Сейчас идёт реклама (SCTE-35)", 14, y, 10, 10, [
         prom(f"ts_stream_scte35_break_active{{{JOB}}} == 1", instant=True, fmt="table", ref="A")],

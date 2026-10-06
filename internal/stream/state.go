@@ -81,6 +81,8 @@ type State struct {
 	downSince      time.Time
 	lastExitLog    time.Time
 	exitsSinceLog  int
+	downs          float64 // переходов online → offline
+	flap           flapState
 }
 
 type scteState struct {

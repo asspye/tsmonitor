@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -65,6 +66,18 @@ func message(kind string, f eventlog.Fields) string {
 
 	case KindStreamUp:
 		return "Поток вернулся, не было " + seconds(f["down_duration_s"])
+
+	case KindStreamFlapping:
+		return fmt.Sprintf("Поток нестабилен: пропаданий за 10 мин — %v, примерно каждые %s. Отдельные пропадания дальше не пишутся",
+			f["downs"], seconds(f["period_s"]))
+
+	case KindStreamStable:
+		state := "работает"
+		if f["state"] == "offline" {
+			state = "нет данных"
+		}
+		return fmt.Sprintf("Поток стабилен 10 мин (%s). Был нестабилен %s, пропаданий: %v",
+			state, duration(f["flapping_s"]), f["downs"])
 
 	case KindTSPExit:
 		return fmt.Sprintf("tsp завершился (%v), перезапусков: %v", f["error"], f["exits"])
@@ -145,8 +158,21 @@ func pidAttrs(p map[string]string) string {
 
 func seconds(v any) string {
 	d, _ := v.(float64)
-	if d >= 10 || d == float64(int64(d)) {
-		return fmt.Sprintf("%.0f с", d)
+	r := math.Round(d*10) / 10
+	if r >= 10 || r == math.Trunc(r) {
+		return fmt.Sprintf("%.0f с", r)
 	}
-	return fmt.Sprintf("%.1f с", d)
+	return fmt.Sprintf("%.1f с", r)
+}
+
+func duration(v any) string {
+	d, _ := v.(float64)
+	if d < 120 {
+		return seconds(d)
+	}
+	m := int(d / 60)
+	if m < 120 {
+		return fmt.Sprintf("%d мин", m)
+	}
+	return fmt.Sprintf("%d ч %d мин", m/60, m%60)
 }

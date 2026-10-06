@@ -113,6 +113,18 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
+          "expr": "count(ts_stream_flapping{job=\"tsmonitor\"} == 1) or vector(0)",
+          "refId": "G",
+          "legendFormat": "Нестабильные",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
           "expr": "count(ts_stream_scte35_break_active{job=\"tsmonitor\"} == 1) or vector(0)",
           "refId": "E",
           "legendFormat": "Идёт реклама",
@@ -214,6 +226,34 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Нестабильные"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "purple",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "description",
+                "value": "Потоки, которые пропадают и возвращаются 3+ раза за 10 минут"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "UDP-потери на сервере (5 мин)"
             },
             "properties": [
@@ -283,7 +323,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"}",
+          "expr": "(3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"}",
           "refId": "A",
           "legendFormat": "{{description}} | {{stream}}",
           "range": true,
@@ -309,6 +349,10 @@
               {
                 "color": "orange",
                 "value": 2
+              },
+              {
+                "color": "purple",
+                "value": 3
               }
             ]
           },
@@ -330,6 +374,11 @@
                   "text": "CC ERR",
                   "color": "orange",
                   "index": 2
+                },
+                "3": {
+                  "text": "НЕСТАБ",
+                  "color": "purple",
+                  "index": 3
                 }
               }
             }
@@ -360,7 +409,7 @@
         },
         "showPercentChange": false
       },
-      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, красный — offline"
+      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, то возвращается (3+ раза за 10 мин), красный — offline"
     },
     {
       "id": 3,
@@ -553,6 +602,19 @@
           "range": false,
           "instant": true,
           "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stream, description) (increase(ts_stream_down_total{job=\"tsmonitor\"}[1h]))",
+          "refId": "F",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
         }
       ],
       "fieldConfig": {
@@ -636,6 +698,40 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Пропаданий"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "purple",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "PCR > 5 мс"
             },
             "properties": [
@@ -710,7 +806,7 @@
           }
         ]
       },
-      "description": "Потоки с CC-ошибками, TEI или превышениями PCR за час, либо с IAT std.dev > 2 мс. Клик по IP:Port — страница потока",
+      "description": "Потоки с CC-ошибками, TEI, превышениями PCR или пропаданиями за час, либо с IAT std.dev > 2 мс. Клик по IP:Port — страница потока",
       "transformations": [
         {
           "id": "merge",
@@ -757,6 +853,15 @@
                     "value": 0.002
                   }
                 }
+              },
+              {
+                "fieldName": "Value #F",
+                "config": {
+                  "id": "greater",
+                  "options": {
+                    "value": 0.5
+                  }
+                }
               }
             ]
           }
@@ -777,7 +882,8 @@
               "Value #B": "TEI",
               "Value #C": "PCR > 5 мс",
               "Value #D": "IAT std.dev",
-              "Value #E": "IAT max"
+              "Value #E": "IAT max",
+              "Value #F": "Пропаданий"
             }
           }
         }

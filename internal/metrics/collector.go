@@ -50,6 +50,8 @@ var (
 	descPCRExceeded  = desc("ts_stream_pcr_jitter_exceeded_total", "Total number of PCRs whose arrival jitter exceeded pcr_jitter_max")
 	descPCRMax       = desc("ts_stream_pcr_jitter_max_seconds", "Largest PCR arrival jitter above pcr_jitter_max in the last interval (0 = none)")
 	descLastReport   = desc("ts_stream_last_report_timestamp_seconds", "Time of the last analyze report from tsp")
+	descDowns        = desc("ts_stream_down_total", "Number of online → offline transitions")
+	descFlapping     = desc("ts_stream_flapping", "1 while the stream keeps going down and up (3+ times in 10 min, until 10 min without transitions)")
 	descRestarts     = desc("ts_stream_restarts_total", "Number of tsp process restarts")
 	descParseErrors  = desc("ts_stream_parse_errors_total", "Number of tsp output lines that failed to parse")
 	descSCTECommands = desc("ts_stream_scte35_commands_total", "SCTE-35 splice commands received (splice_null included)", "command")
@@ -146,6 +148,8 @@ func collectStream(ch chan<- prometheus.Metric, s *stream.Snapshot) {
 		gauge(ch, descLastReport, unixSeconds(s.LastReport), l...)
 	}
 	counter(ch, descRestarts, s.Restarts, l...)
+	counter(ch, descDowns, s.Downs, l...)
+	gauge(ch, descFlapping, boolValue(s.Flapping), l...)
 	counter(ch, descParseErrors, s.ParseErrors, l...)
 
 	collectSCTE(ch, &s.SCTE, with)

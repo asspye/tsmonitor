@@ -17,6 +17,8 @@ const (
 	KindStreamDown     = "stream_down"
 	KindStreamUp       = "stream_up"
 	KindTSPExit        = "tsp_exit"
+	KindStreamFlapping = "stream_flapping"
+	KindStreamStable   = "stream_stable"
 )
 
 // confirmReports — сколько отчётов подряд новый состав PID/сервисов должен
@@ -70,7 +72,9 @@ func (s *State) trackCC(errs map[string]int64, tei int64, now time.Time) []event
 			b.byPID[p] += n
 		}
 		b.tei += tei
-		if !starting {
+		// Пока поток нестабилен, каждый его возврат начинается с разрыва CC —
+		// эти серии не логируем (их объясняет stream_flapping), метрики считаются как обычно
+		if !starting || s.flap.active {
 			return nil
 		}
 		f := eventlog.Fields{
@@ -84,6 +88,10 @@ func (s *State) trackCC(errs map[string]int64, tei int64, now time.Time) []event
 		return []event{{KindCCErrors, f}}
 	}
 	if b.active {
+		if s.flap.active {
+			*b = ccBurst{}
+			return nil
+		}
 		return []event{s.endCCBurst(now, "clean")}
 	}
 	return nil
@@ -239,10 +247,29 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
+// Флаппинг: поток, который пропадает flapDowns раз за flapWindow, логируется одним
+// событием stream_flapping вместо пары down/up на каждый цикл; stream_stable —
+// когда переходов не было flapStableAfter.
+const (
+	flapDowns       = 3
+	flapWindow      = 10 * time.Minute
+	flapStableAfter = 10 * time.Minute
+)
+
+// flapState — недавние пропадания и состояние флаппинга
+type flapState struct {
+	recentDowns    []time.Time // пропадания за последние flapWindow
+	active         bool
+	since          time.Time // начало флаппинга
+	downs          int       // пропаданий с начала флаппинга
+	lastTransition time.Time
+}
+
 // CheckStatus логирует переходы online ↔ offline. Вызывается периодически.
 func (s *State) CheckStatus(now time.Time, log EventLogger) {
 	s.mu.Lock()
 	online := s.onlineLocked(now)
+	fl := &s.flap
 	var events []event
 	switch {
 	case !s.statusKnown:
@@ -252,28 +279,78 @@ func (s *State) CheckStatus(now time.Time, log EventLogger) {
 			s.statusKnown, s.wasOnline, s.downSince = true, false, now
 			events = append(events, event{KindStreamDown, eventlog.Fields{"reason": "no data since monitor start"}})
 		}
+
 	case s.wasOnline && !online:
+		wasFlapping := fl.active
 		s.wasOnline, s.downSince = false, now
-		f := eventlog.Fields{"reason": "zero bitrate"}
-		if s.lastReport.IsZero() || now.Sub(s.lastReport) >= staleFactor*s.Interval {
-			f["reason"] = "no data"
+		s.downs++
+		if fl.active {
+			fl.downs++
 		}
-		if !s.lastReport.IsZero() {
-			f["last_report"] = s.lastReport.Format(time.RFC3339Nano)
+		fl.lastTransition = now
+		fl.recentDowns = append(pruneBefore(fl.recentDowns, now.Add(-flapWindow)), now)
+		switch {
+		case fl.active:
+			// во время флаппинга отдельные пропадания не пишем
+		case len(fl.recentDowns) >= flapDowns:
+			n := len(fl.recentDowns)
+			period := fl.recentDowns[n-1].Sub(fl.recentDowns[0]).Seconds() / float64(n-1)
+			*fl = flapState{active: true, since: fl.recentDowns[0], downs: n, recentDowns: fl.recentDowns, lastTransition: now}
+			events = append(events, event{KindStreamFlapping, eventlog.Fields{
+				"downs":    n,
+				"window_s": flapWindow.Seconds(),
+				"period_s": period,
+			}})
+		default:
+			f := eventlog.Fields{"reason": "zero bitrate"}
+			if s.lastReport.IsZero() || now.Sub(s.lastReport) >= staleFactor*s.Interval {
+				f["reason"] = "no data"
+			}
+			if !s.lastReport.IsZero() {
+				f["last_report"] = s.lastReport.Format(time.RFC3339Nano)
+			}
+			events = append(events, event{KindStreamDown, f})
 		}
-		events = append(events, event{KindStreamDown, f})
 		if s.cc.active {
-			events = append(events, s.endCCBurst(now, "stream_down"))
+			if wasFlapping {
+				s.cc = ccBurst{} // серия во время флаппинга не логировалась
+			} else {
+				events = append(events, s.endCCBurst(now, "stream_down"))
+			}
 		}
+
 	case !s.wasOnline && online:
 		s.wasOnline = true
-		events = append(events, event{KindStreamUp, eventlog.Fields{
-			"down_since":      s.downSince.Format(time.RFC3339Nano),
-			"down_duration_s": now.Sub(s.downSince).Seconds(),
+		fl.lastTransition = now
+		if !fl.active {
+			events = append(events, event{KindStreamUp, eventlog.Fields{
+				"down_since":      s.downSince.Format(time.RFC3339Nano),
+				"down_duration_s": now.Sub(s.downSince).Seconds(),
+			}})
+		}
+
+	case fl.active && now.Sub(fl.lastTransition) >= flapStableAfter:
+		state := "offline"
+		if s.wasOnline {
+			state = "online"
+		}
+		events = append(events, event{KindStreamStable, eventlog.Fields{
+			"state":      state,
+			"flapping_s": fl.lastTransition.Sub(fl.since).Seconds(),
+			"downs":      fl.downs,
 		}})
+		*fl = flapState{}
 	}
 	s.mu.Unlock()
 	s.emit(log, events)
+}
+
+func pruneBefore(ts []time.Time, cutoff time.Time) []time.Time {
+	i := 0
+	for i < len(ts) && ts[i].Before(cutoff) {
+		i++
+	}
+	return append([]time.Time(nil), ts[i:]...)
 }
 
 // tspExitLogEvery — tsp_exit пишем не чаще этого на поток (tsp, который не может
