@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultConfigPath = "/etc/tsmonitor/config.yaml"
-	version           = "1.0.0"
+	version           = "2.0.0"
 )
 
 func main() {
@@ -38,6 +38,14 @@ func main() {
 	fmt.Printf("✅ Config loaded: %d streams\n", cfg.StreamCount())
 	fmt.Printf("   Interface: %s\n", cfg.Interface)
 	fmt.Printf("   Metrics port: %d\n", cfg.MetricsPort)
+	fmt.Printf("   Interval: %s, receive buffer: %d, PCR jitter max: %s, SCTE-35: %v\n",
+		cfg.Interval, cfg.ReceiveBuffer, cfg.PCRJitterMax, cfg.SCTE35Enabled())
+	if cfg.EventLog != "" {
+		fmt.Printf("   Event log: %s\n", cfg.EventLog)
+	}
+	for _, d := range cfg.Duplicates {
+		fmt.Printf("⚠️  Duplicate url skipped: %s (%s)\n", d.URL, d.Description)
+	}
 	fmt.Println()
 
 	// Создаём контекст с отменой
@@ -49,8 +57,12 @@ func main() {
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Создаём и запускаем orchestrator
-	orch := monitor.NewOrchestrator(cfg)
-	
+	orch, err := monitor.NewOrchestrator(cfg)
+	if err != nil {
+		fmt.Printf("❌ Failed to create orchestrator: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := orch.Start(ctx); err != nil {
 		fmt.Printf("❌ Failed to start orchestrator: %v\n", err)
 		os.Exit(1)

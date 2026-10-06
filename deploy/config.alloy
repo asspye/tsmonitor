@@ -1,0 +1,68 @@
+// Alloy on the tsmonitor host (docker-otcnet, 192.168.1.26):
+// stream events -> Loki, host metrics -> Prometheus on monitoring.otcnet.ru (LAN only).
+// Same labels as the ostankino-ansible alloy role (host = hostname).
+
+// tsmonitor event log: one JSON object per line (SCTE-35, CC errors, PID changes, up/down)
+loki.source.file "tsmonitor_events" {
+  targets       = [{"__path__" = "/var/log/tsmonitor/events.log", "job" = "tsmonitor-events", "host" = "docker-otcnet"}]
+  forward_to    = [loki.process.tsmonitor_events.receiver]
+  tail_from_end = true
+}
+
+loki.process "tsmonitor_events" {
+  stage.json {
+    expressions = { kind = "", stream = "", time = "" }
+  }
+  // stream = group:port (~400 values), kind = event type (7 values): small label set, fast per-stream queries
+  stage.labels {
+    values = { kind = "", stream = "" }
+  }
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+  }
+  forward_to = [loki.write.monitoring.receiver]
+}
+
+// System logs, as on the live servers
+local.file_match "system" {
+  path_targets = [
+    {"__path__" = "/var/log/auth.log", "job" = "auth", "host" = "docker-otcnet"},
+    {"__path__" = "/var/log/kern.log", "job" = "kernel", "host" = "docker-otcnet"},
+    {"__path__" = "/var/log/syslog", "job" = "syslog", "host" = "docker-otcnet"},
+  ]
+}
+
+loki.source.file "system" {
+  targets       = local.file_match.system.targets
+  forward_to    = [loki.write.monitoring.receiver]
+  tail_from_end = true
+}
+
+loki.write "monitoring" {
+  endpoint {
+    url = "http://192.168.1.83:3100/loki/api/v1/push"
+  }
+}
+
+// Host metrics: CPU / load / RAM / network (incl. UDP drops) / disks
+prometheus.exporter.unix "host" {
+  netdev {
+    device_exclude = "^(lo|veth.*|docker.*|br-.*)$"
+  }
+}
+
+prometheus.scrape "host" {
+  targets         = prometheus.exporter.unix.host.targets
+  forward_to      = [prometheus.remote_write.monitoring.receiver]
+  scrape_interval = "30s"
+  job_name        = "node"
+}
+
+prometheus.remote_write "monitoring" {
+  endpoint {
+    url = "http://192.168.1.83:9090/api/v1/write"
+  }
+  // Same label as the logs in Loki
+  external_labels = { host = "docker-otcnet" }
+}

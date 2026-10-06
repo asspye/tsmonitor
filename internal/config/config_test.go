@@ -20,13 +20,13 @@ streams:
   - url: "233.198.134.91:3333"
     description: "Test Stream 2"
 `
-	
+
 	tmpfile, err := os.CreateTemp("", "config-*.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(tmpfile.Name())
-	
+
 	if _, err := tmpfile.Write([]byte(content)); err != nil {
 		t.Fatal(err)
 	}
@@ -117,5 +117,40 @@ func TestValidate(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestLoadDefaultsAndDuplicates(t *testing.T) {
+	content := `
+interface: "172.22.2.154"
+metrics_port: 9090
+streams:
+  - url: "233.198.134.1:3333"
+    description: "A"
+  - url: "233.198.134.1:3333"
+    description: "A again"
+  - url: "233.198.134.2:3333"
+    description: "B"
+`
+	tmpfile, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+	tmpfile.WriteString(content)
+	tmpfile.Close()
+
+	cfg, err := Load(tmpfile.Name())
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Interval != DefaultInterval || cfg.ReceiveBuffer != DefaultReceiveBuffer || cfg.PCRJitterMax != DefaultPCRJitterMax {
+		t.Errorf("defaults not applied: %+v", cfg)
+	}
+	if !cfg.SCTE35Enabled() {
+		t.Error("scte35 must be enabled by default")
+	}
+	if len(cfg.Streams) != 2 || len(cfg.Duplicates) != 1 {
+		t.Errorf("streams=%d duplicates=%d, want 2 and 1", len(cfg.Streams), len(cfg.Duplicates))
 	}
 }

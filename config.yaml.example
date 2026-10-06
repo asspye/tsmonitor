@@ -1,10 +1,16 @@
-interface: "172.22.2.154"
+interface: "172.22.2.154"   # local address of the multicast interface
 metrics_port: 9090
-timeout: 10s
+
+# Optional settings (defaults shown)
+interval: 5s                # analyze/iat report period; stream is offline after 3×interval without a report
+receive_buffer: 8388608     # tsp -I ip --buffer-size, bytes (capped by net.core.rmem_max, see deploy/99-tsmonitor.conf)
+pcr_jitter_max: 5ms         # pcrverify threshold; 0 disables pcrverify
+scte35: true                # run splicemonitor on every stream
+event_log: /var/log/tsmonitor/events.log   # stream events as JSON lines (SCTE-35, CC errors, PID changes, up/down); empty = stdout
 
 streams:
   - url: "233.198.134.1:3333"
     description: "Example Stream 1| Provider| HD| multicast| ID001"
-  
+
   - url: "233.198.134.2:3333"
     description: "Example Stream 2| Provider| SD| multicast| ID002"

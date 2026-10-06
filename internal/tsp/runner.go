@@ -6,230 +6,148 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
-// StreamingRunner запускает долгоживущий процесс tsp
-type StreamingRunner struct {
-	LocalInterface string
-	StreamURL      string
-	Description    string
-	
-	cmd           *exec.Cmd
-	mu            sync.Mutex
-	running       bool
-	restartDelay  time.Duration
-	
-	MetricsChan chan *StreamMetrics
+// Options — параметры запуска tsp для одного потока
+type Options struct {
+	LocalAddress  string        // адрес интерфейса для multicast
+	URL           string        // group:port или HLS-плейлист
+	Interval      time.Duration // период отчётов analyze/iat
+	ReceiveBuffer int           // --buffer-size для -I ip, 0 — по умолчанию
+	PCRJitterMax  time.Duration // порог pcrverify, 0 — без pcrverify
+	SCTE35        bool          // запускать splicemonitor
 }
 
-// NewStreamingRunner создает новый StreamingRunner
-func NewStreamingRunner(localInterface, streamURL, description string) *StreamingRunner {
-	return &StreamingRunner{
-		LocalInterface: localInterface,
-		StreamURL:      streamURL,
-		Description:    description,
-		restartDelay:   5 * time.Second,
-		MetricsChan:    make(chan *StreamMetrics, 100), // Увеличили буфер
+// IsHLS — поток задан HLS-плейлистом, а не multicast-адресом
+func IsHLS(url string) bool {
+	return strings.Contains(url, "://") || strings.HasSuffix(strings.ToLower(url), ".m3u8")
+}
+
+// BuildArgs собирает аргументы tsp.
+// iat и pcrverify -i имеют смысл только для датаграмм с временем приёма ядра,
+// поэтому для HLS не запускаются.
+func BuildArgs(o Options) []string {
+	secs := strconv.Itoa(int(o.Interval / time.Second))
+	var args []string
+
+	hls := IsHLS(o.URL)
+	if hls {
+		args = append(args, "-I", "hls", "--live", o.URL)
+	} else {
+		args = append(args, "-I", "ip", "--local-address", o.LocalAddress)
+		if o.ReceiveBuffer > 0 {
+			args = append(args, "--buffer-size", strconv.Itoa(o.ReceiveBuffer))
+		}
+		args = append(args, o.URL)
+		args = append(args, "-P", "iat", "--interval", secs)
+		if o.PCRJitterMax > 0 {
+			args = append(args, "-P", "pcrverify", "--input-synchronous",
+				"--jitter-max", strconv.FormatInt(o.PCRJitterMax.Microseconds(), 10))
+		}
 	}
-}
-
-// Start запускает долгоживущий процесс tsp
-func (r *StreamingRunner) Start(ctx context.Context) error {
-	r.mu.Lock()
-	if r.running {
-		r.mu.Unlock()
-		return fmt.Errorf("runner already running for %s", r.StreamURL)
+	if o.SCTE35 {
+		args = append(args, "-P", "splicemonitor", "--all-commands", "--json-line="+SCTEPrefix)
 	}
-	r.running = true
-	r.mu.Unlock()
-
-	go r.runLoop(ctx)
-	return nil
+	args = append(args,
+		"-P", "analyze", "--interval", secs, "--json-line="+AnalyzePrefix,
+		"-O", "drop",
+	)
+	return args
 }
 
-// runLoop основной цикл работы
-func (r *StreamingRunner) runLoop(ctx context.Context) {
-	defer func() {
-		r.mu.Lock()
-		r.running = false
-		r.mu.Unlock()
-		close(r.MetricsChan)
-	}()
+// Runner держит процесс tsp запущенным и передаёт каждую строку его вывода в OnLine
+type Runner struct {
+	Opts         Options
+	OnLine       func(line string)
+	OnExit       func(err error) // вызывается после каждого завершения tsp
+	RestartDelay time.Duration
+	StopTimeout  time.Duration
+}
 
+// maxLine — предел длины строки: JSON analyze для MPTS с десятками PID бывает большим
+const maxLine = 4 * 1024 * 1024
+
+// Run запускает tsp и перезапускает его после выхода, пока не отменён ctx
+func (r *Runner) Run(ctx context.Context) {
+	delay := r.RestartDelay
+	if delay == 0 {
+		delay = 5 * time.Second
+	}
 	for {
+		err := r.runOnce(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if r.OnExit != nil {
+			r.OnExit(err)
+		}
 		select {
 		case <-ctx.Done():
 			return
-		default:
-			if err := r.runTSP(ctx); err != nil {
-				fmt.Printf("[%s] tsp error: %v\n", r.StreamURL, err)
-			}
-
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(r.restartDelay):
-			}
+		case <-time.After(delay):
 		}
 	}
 }
 
-// runTSP запускает процесс tsp и читает его вывод
-func (r *StreamingRunner) runTSP(ctx context.Context) error {
-	args := []string{
-		"-I", "ip",
-		"--local-address", r.LocalInterface,
-		r.StreamURL,
-		"-O", "drop",
-		"-P", "continuity",
-		"-P", "tables", "--all-sections",
-		"-P", "bitrate_monitor",
-		"-p", "1",
-		"-t", "1",
+func (r *Runner) runOnce(ctx context.Context) error {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return fmt.Errorf("pipe: %w", err)
 	}
+	defer pr.Close()
 
-	cmd := exec.CommandContext(ctx, "tsp", args...)
-	
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdout pipe: %w", err)
-	}
-	
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stderr pipe: %w", err)
-	}
+	cmd := exec.Command("tsp", BuildArgs(r.Opts)...)
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	setProcAttr(cmd)
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start tsp: %w", err)
+		pw.Close()
+		return fmt.Errorf("start tsp: %w", err)
 	}
+	pw.Close() // пишущий конец остаётся только у tsp: EOF придёт, когда он завершится
 
-	r.mu.Lock()
-	r.cmd = cmd
-	r.mu.Unlock()
-
-	// Канал для объединения строк из stdout и stderr
-	linesChan := make(chan string, 100)
-	
-	// Читаем stdout в отдельной горутине
+	done := make(chan struct{})
+	defer close(done)
 	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			linesChan <- scanner.Text()
-		}
-	}()
-	
-	// Читаем stderr в отдельной горутине  
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			linesChan <- scanner.Text()
-		}
-	}()
-
-	// Обрабатываем строки
-	buffer := strings.Builder{}
-	lastUpdate := time.Now()
-	const maxBufferSize = 500 * 1024
-
-	// Горутина для проверки таймаута
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if time.Since(lastUpdate) > 10*time.Second {
-					offlineMetrics := &StreamMetrics{
-						StreamURL:   r.StreamURL,
-						Description: r.Description,
-						Status:      false,
-						LastSeen:    lastUpdate,
-						PIDs:        []PIDInfo{},
-						CCErrors:    make(map[string]int64),
-					}
-					
-					select {
-					case r.MetricsChan <- offlineMetrics:
-						lastUpdate = time.Now()
-					default:
-					}
-				}
-			}
-		}
-	}()
-
-	// Основной цикл чтения
-	for {
 		select {
 		case <-ctx.Done():
-			cmd.Process.Kill()
-			return nil
-			
-		case line := <-linesChan:
-			buffer.WriteString(line)
-			buffer.WriteString("\n")
-
-			// Парсим когда видим bitrate_monitor
-			if strings.Contains(line, "bitrate_monitor:") {
-				metrics, err := ParseOutput(buffer.String(), r.StreamURL, r.Description)
-				if err == nil {
-					select {
-					case r.MetricsChan <- metrics:
-						lastUpdate = time.Now()
-					default:
-					}
-				}
-
-				// Обрезаем буфер если слишком большой
-				if buffer.Len() > maxBufferSize {
-					content := buffer.String()
-					keepFrom := len(content) - maxBufferSize/2
-					if keepFrom < 0 {
-						keepFrom = 0
-					}
-					buffer.Reset()
-					buffer.WriteString(content[keepFrom:])
-				}
+			cmd.Process.Signal(os.Interrupt)
+			stop := r.StopTimeout
+			if stop == 0 {
+				stop = 3 * time.Second
 			}
-
-			// Защита от переполнения
-			if buffer.Len() > maxBufferSize*2 {
-				content := buffer.String()
-				keepFrom := len(content) - maxBufferSize
-				if keepFrom < 0 {
-					keepFrom = 0
-				}
-				buffer.Reset()
-				buffer.WriteString(content[keepFrom:])
+			select {
+			case <-done:
+			case <-time.After(stop):
+				cmd.Process.Kill()
 			}
+		case <-done:
+		}
+	}()
+
+	sc := bufio.NewScanner(pr)
+	sc.Buffer(make([]byte, 64*1024), maxLine)
+	for sc.Scan() {
+		if r.OnLine != nil {
+			r.OnLine(sc.Text())
 		}
 	}
-}
-
-// Stop останавливает процесс tsp
-func (r *StreamingRunner) Stop() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.cmd != nil && r.cmd.Process != nil {
-		if err := r.cmd.Process.Signal(os.Interrupt); err != nil {
-			return r.cmd.Process.Kill()
-		}
+	scanErr := sc.Err()
+	if scanErr != nil {
+		// Слишком длинная строка: дальше читать нельзя — останавливаем tsp
+		cmd.Process.Kill()
 	}
 
-	return nil
-}
-
-// IsRunning проверяет работает ли runner
-func (r *StreamingRunner) IsRunning() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.running
+	waitErr := cmd.Wait()
+	if scanErr != nil {
+		return fmt.Errorf("read tsp output: %w", scanErr)
+	}
+	if waitErr != nil {
+		return fmt.Errorf("tsp exited: %w", waitErr)
+	}
+	return fmt.Errorf("tsp exited")
 }

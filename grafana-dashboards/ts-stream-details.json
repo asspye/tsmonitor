@@ -1,4 +1,76 @@
 {
+  "uid": "ts-stream-details",
+  "title": "TS Stream Details",
+  "tags": [
+    "stream-details",
+    "ts-monitoring"
+  ],
+  "schemaVersion": 42,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "graphTooltip": 1,
+  "links": [
+    {
+      "title": "← Назад к обзору",
+      "type": "link",
+      "url": "/d/ts-stream-overview",
+      "icon": "external link",
+      "keepTime": true
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "label": "Data Source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {
+          "text": "Prometheus",
+          "value": "PBFA97CFB590B2093"
+        },
+        "refresh": 1,
+        "includeAll": false
+      },
+      {
+        "name": "stream",
+        "label": "Поток",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(ts_stream_status{job=\"tsmonitor\"}, stream)",
+          "refId": "A"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false
+      },
+      {
+        "name": "description",
+        "label": "Канал",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "hide": 0,
+        "query": {
+          "query": "label_values(ts_stream_status{job=\"tsmonitor\", stream=\"$stream\"}, description)",
+          "refId": "A"
+        },
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
   "annotations": {
     "list": [
       {
@@ -12,100 +84,88 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "name": "Реклама SCTE-35",
+        "enable": true,
+        "iconColor": "blue",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "target": {
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind=\"scte35\"} | json | type=\"event\" | progress=\"occurred\"",
+          "refId": "A"
+        },
+        "textFormat": "{{event_type}} id={{event_id}}",
+        "tagKeys": "event_type",
+        "titleFormat": "Реклама SCTE-35"
+      },
+      {
+        "name": "CC-ошибки",
+        "enable": true,
+        "iconColor": "red",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "target": {
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind=\"cc_errors\"} | json | phase=\"start\"",
+          "refId": "A"
+        },
+        "textFormat": "CC-ошибки начались",
+        "tagKeys": "",
+        "titleFormat": "CC-ошибки"
+      },
+      {
+        "name": "Смена PID / сервиса",
+        "enable": true,
+        "iconColor": "orange",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "target": {
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind=~\"pids_changed|service_changed\"}",
+          "refId": "A"
+        },
+        "textFormat": "{{kind}}",
+        "tagKeys": "",
+        "titleFormat": "Смена PID / сервиса"
+      },
+      {
+        "name": "Поток пропал / вернулся",
+        "enable": true,
+        "iconColor": "purple",
+        "datasource": {
+          "type": "loki",
+          "uid": "P8E80F9AEF21F6940"
+        },
+        "target": {
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind=~\"stream_down|stream_up\"}",
+          "refId": "A"
+        },
+        "textFormat": "{{kind}}",
+        "tagKeys": "",
+        "titleFormat": "Поток пропал / вернулся"
       }
     ]
   },
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
-  "id": 0,
-  "links": [
-    {
-      "asDropdown": false,
-      "icon": "external link",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": false,
-      "title": "← Назад к обзору",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/ts-stream-overview"
-    }
-  ],
   "panels": [
     {
+      "id": 13,
+      "type": "stat",
+      "title": "Статус",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "🔴 OFFLINE"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "🟢 ONLINE"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": 0
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 3,
-        "w": 4,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "text": {
-          "valueSize": 28
-        },
-        "textMode": "value",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.2.0",
       "targets": [
         {
           "datasource": {
@@ -114,82 +174,665 @@
           },
           "editorMode": "code",
           "expr": "ts_stream_status{stream=\"$stream\"}",
-          "legendFormat": "Статус",
+          "refId": "A",
+          "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
-      "title": "Статус",
-      "type": "stat"
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OFFLINE",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "ONLINE",
+                  "color": "green",
+                  "index": 1
+                },
+                "2": {
+                  "text": "CC ERR",
+                  "color": "orange",
+                  "index": 2
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      }
     },
     {
+      "id": 14,
+      "type": "stat",
+      "title": "Битрейт TS",
+      "gridPos": {
+        "x": 3,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_bitrate_bps{stream=\"$stream\",type=\"total\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Битрейт net",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_bitrate_bps{stream=\"$stream\",type=\"net\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "Без нулевых пакетов (PID 0x1FFF)"
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "CC-ошибки за период",
+      "gridPos": {
+        "x": 9,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(ts_stream_cc_errors_total{stream=\"$stream\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "fixed"
+            "mode": "thresholds"
           },
-          "custom": {
-            "align": "left",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Название канала"
-            },
-            "properties": [
+                "value": null
+              },
               {
-                "id": "custom.width",
-                "value": 300
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Stream"
-            },
-            "properties": [
+                "color": "orange",
+                "value": 1
+              },
               {
-                "id": "custom.width",
-                "value": 180
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Тип"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
+                "color": "red",
                 "value": 100
               }
             ]
           },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "Разрывы continuity counter по всем PID за выбранный период"
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "TEI за период",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(ts_stream_transport_errors_total{stream=\"$stream\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "Пакеты с transport_error_indicator"
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Джиттер IAT (std.dev)",
+      "gridPos": {
+        "x": 15,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_iat_seconds{stream=\"$stream\",stat=\"stddev\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.002
+              },
+              {
+                "color": "red",
+                "value": 0.01
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "Стандартное отклонение интервала между UDP-датаграммами (плагин iat)"
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "IAT max",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_iat_seconds{stream=\"$stream\",stat=\"max\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "Наибольший интервал между UDP-датаграммами за 5 с"
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "PCR > 5 мс за период",
+      "gridPos": {
+        "x": 21,
+        "y": 0,
+        "w": 3,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(ts_stream_pcr_jitter_exceeded_total{stream=\"$stream\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "PCR, пришедшие с джиттером больше порога pcr_jitter_max (pcrverify --input-synchronous)"
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Сервис",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 14,
+        "h": 3
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_service_info{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "Value": true,
+              "stream": true,
+              "description": true
+            },
+            "renameByName": {
+              "service_name": "Сервис",
+              "provider": "Провайдер",
+              "service_type": "Тип"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "table",
+      "title": "PID",
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 14,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_pid_bitrate_bps{stream=\"$stream\"} * on(stream, pid) group_left(codec, language, resolution) ts_stream_pid_info{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
           {
             "matcher": {
               "id": "byName",
@@ -197,35 +840,139 @@
             },
             "properties": [
               {
-                "id": "custom.width",
-                "value": 150
-              },
-              {
                 "id": "unit",
-                "value": "Mbits"
+                "value": "bps"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "PID",
+            "desc": false
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "stream": true,
+              "description": true
+            },
+            "renameByName": {
+              "pid": "PID",
+              "type": "Тип",
+              "codec": "Кодек",
+              "language": "Язык",
+              "resolution": "Разрешение",
+              "Value": "Битрейт"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "bargauge",
+      "title": "Интервалы таблиц PSI/SI (max за 5 с)",
+      "gridPos": {
+        "x": 14,
+        "y": 4,
+        "w": 10,
+        "h": 11
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_table_interval_seconds{stream=\"$stream\",stat=\"max\"}",
+          "refId": "A",
+          "legendFormat": "{{table}}",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
               },
               {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SDT"
+            },
+            "properties": [
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "red",
-                      "value": 0
+                      "color": "green",
+                      "value": null
                     },
                     {
-                      "color": "yellow",
-                      "value": 1
-                    },
+                      "color": "red",
+                      "value": 2
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "NIT"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
                     {
                       "color": "green",
-                      "value": 3
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
                     }
                   ]
                 }
@@ -234,18 +981,48 @@
           }
         ]
       },
-      "gridPos": {
-        "h": 3,
-        "w": 20,
-        "x": 4,
-        "y": 0
-      },
-      "id": 8,
       "options": {
-        "cellHeight": "sm",
-        "showHeader": true
+        "displayMode": "basic",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
       },
-      "pluginVersion": "12.2.0",
+      "description": "Наибольший интервал повторения за последний отчёт. ETR 290: PAT, PMT, CAT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с"
+    },
+    {
+      "id": 24,
+      "type": "row",
+      "title": "Битрейт",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 15,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "Битрейт потока",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "datasource": {
@@ -253,160 +1030,514 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "ts_stream_bitrate_bps{stream=\"$stream\", type=\"total\"} / 1000000",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
+          "expr": "ts_stream_bitrate_bps{stream=\"$stream\",type=\"total\"}",
+          "refId": "A",
+          "legendFormat": "TS",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_bitrate_bps{stream=\"$stream\",type=\"net\"}",
+          "refId": "B",
+          "legendFormat": "net",
+          "range": true,
+          "instant": false
         }
       ],
-      "title": "Информация о потоке",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "instance": true,
-              "job": true
-            },
-            "indexByName": {
-              "Time": 0,
-              "Value": 4,
-              "__name__": 1,
-              "description": 2,
-              "instance": 5,
-              "job": 6,
-              "stream": 3,
-              "type": 7
-            },
-            "renameByName": {
-              "Value": "Битрейт",
-              "description": "Название канала",
-              "stream": "Stream",
-              "type": "Тип"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
             }
           }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      ],
-      "type": "table"
+      }
     },
     {
+      "id": 26,
+      "type": "timeseries",
+      "title": "Битрейт по PID",
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_pid_bitrate_bps{stream=\"$stream\"} * on(stream, pid) group_left(codec, language) ts_stream_pid_info{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "{{pid}} {{codec}} {{language}}",
+          "range": true,
+          "instant": false
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "unit": "bps",
           "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "lineWidth": 1,
+            "fillOpacity": 10,
             "showPoints": "never",
-            "showValues": false,
             "spanNulls": false,
+            "axisSoftMin": 0,
             "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
+              "mode": "normal",
+              "group": "A"
             }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "Ошибки",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "CC-ошибки по PID (за минуту)",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
+          "editorMode": "code",
+          "expr": "sum by (pid) (increase(ts_stream_cc_errors_total{stream=\"$stream\"}[1m])) > 0",
+          "refId": "A",
+          "legendFormat": "PID {{pid}}",
+          "range": true,
+          "instant": false,
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Разрывы continuity counter. Начало и конец каждой серии ошибок — в журнале событий ниже"
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "TEI и sync (за минуту)",
+      "gridPos": {
+        "x": 12,
+        "y": 25,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
-          "unit": "Mbits"
+          "editorMode": "code",
+          "expr": "increase(ts_stream_transport_errors_total{stream=\"$stream\"}[1m])",
+          "refId": "A",
+          "legendFormat": "TEI",
+          "range": true,
+          "instant": false,
+          "interval": "1m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "increase(ts_stream_sync_errors_total{stream=\"$stream\"}[1m])",
+          "refId": "B",
+          "legendFormat": "sync",
+          "range": true,
+          "instant": false,
+          "interval": "1m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "Джиттер",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "IAT — интервал между UDP-датаграммами",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_iat_seconds{stream=\"$stream\",stat=\"mean\"}",
+          "refId": "A",
+          "legendFormat": "среднее",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_iat_seconds{stream=\"$stream\",stat=\"stddev\"}",
+          "refId": "B",
+          "legendFormat": "std.dev (джиттер)",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_iat_seconds{stream=\"$stream\",stat=\"max\"}",
+          "refId": "C",
+          "legendFormat": "max",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "Плагин iat, время приёма ядра. Рост std.dev и max — неравномерная доставка (сеть или источник)"
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "PCR-джиттер",
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "increase(ts_stream_pcr_jitter_exceeded_total{stream=\"$stream\"}[1m])",
+          "refId": "A",
+          "legendFormat": "PCR > 5 мс за минуту",
+          "range": true,
+          "instant": false,
+          "interval": "1m"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_pcr_jitter_max_seconds{stream=\"$stream\"}",
+          "refId": "B",
+          "legendFormat": "max джиттер",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Total Bitrate"
+              "options": "max джиттер"
             },
             "properties": [
               {
-                "id": "color",
-                "value": {
-                  "fixedColor": "blue",
-                  "mode": "fixed"
-                }
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Net Bitrate"
+              "options": "PCR > 5 мс за минуту"
             },
             "properties": [
               {
-                "id": "color",
-                "value": {
-                  "fixedColor": "green",
-                  "mode": "fixed"
-                }
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 60
               }
             ]
           }
         ]
       },
-      "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 3
-      },
-      "id": 5,
       "options": {
         "legend": {
-          "calcs": [
-            "last",
-            "max",
-            "min",
-            "mean"
-          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
         },
         "tooltip": {
-          "hideZeros": false,
           "mode": "multi",
-          "sort": "none"
+          "sort": "desc"
         }
       },
-      "pluginVersion": "12.2.0",
+      "description": "pcrverify --input-synchronous: отклонение PCR от времени прихода пакета больше порога"
+    },
+    {
+      "id": 33,
+      "type": "row",
+      "title": "Таблицы PSI/SI",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "Интервал повторения таблиц (max)",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "datasource": {
@@ -414,284 +1545,199 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "ts_stream_bitrate_bps{stream=\"$stream\", type=\"total\"} / 1000000",
-          "legendFormat": "Total Bitrate",
+          "expr": "ts_stream_table_interval_seconds{stream=\"$stream\",stat=\"max\"}",
+          "refId": "A",
+          "legendFormat": "{{table}}",
           "range": true,
-          "refId": "A"
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
         },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "description": "ETR 290: PAT, PMT, CAT ≤ 0.5 с; SDT ≤ 2 с; NIT ≤ 10 с"
+    },
+    {
+      "id": 35,
+      "type": "row",
+      "title": "Реклама SCTE-35",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 50,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 36,
+      "type": "state-timeline",
+      "title": "Рекламный блок",
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "ts_stream_bitrate_bps{stream=\"$stream\", type=\"net\"} / 1000000",
-          "hide": false,
-          "legendFormat": "Net Bitrate",
+          "expr": "ts_stream_scte35_break_active{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "блок",
           "range": true,
-          "refId": "B"
+          "instant": false
         }
       ],
-      "title": "📊 График битрейта потока",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "эфир",
+                  "color": "transparent",
+                  "index": 0
+                },
+                "1": {
+                  "text": "реклама",
+                  "color": "blue",
+                  "index": 1
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "showValue": "never",
+        "mergeValues": true,
+        "rowHeight": 0.8,
+        "legend": {
+          "showLegend": false
+        }
+      },
+      "description": "1 — между событиями out и in (или до конца заявленной длительности)"
     },
     {
+      "id": 37,
+      "type": "stat",
+      "title": "Блоков за период",
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 3,
+        "h": 5
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(ts_stream_scte35_events_total{stream=\"$stream\",direction=\"out\"}[$__range]))",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": false,
+          "instant": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "PID"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 100
+                "color": "blue",
+                "value": null
               }
             ]
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Тип"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 120
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "audio": {
-                        "color": "blue",
-                        "index": 0,
-                        "text": "🔊 Audio"
-                      },
-                      "data": {
-                        "color": "purple",
-                        "index": 1,
-                        "text": "📊 Data"
-                      },
-                      "other": {
-                        "color": "gray",
-                        "index": 3,
-                        "text": "⚙️ Other"
-                      },
-                      "video": {
-                        "color": "green",
-                        "index": 2,
-                        "text": "📺 Video"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Кодек"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 150
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Язык"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 80
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 12
-      },
-      "id": 7,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "PID"
-          }
-        ]
-      },
-      "pluginVersion": "12.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "ts_stream_pid_info{stream=\"$stream\"}",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "📋 PID Information",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "description": true,
-              "instance": true,
-              "job": true,
-              "stream": true
-            },
-            "indexByName": {},
-            "renameByName": {
-              "codec": "Кодек",
-              "language": "Язык",
-              "pid": "PID",
-              "type": "Тип"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "short"
+          "decimals": 0
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 12
-      },
-      "id": 9,
       "options": {
-        "legend": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
           "calcs": [
-            "last"
+            "lastNotNull"
           ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
+        "showPercentChange": false
       },
-      "pluginVersion": "12.2.0",
+      "description": "Наступивших событий out (начало рекламы)"
+    },
+    {
+      "id": 38,
+      "type": "stat",
+      "title": "Длительность блока",
+      "gridPos": {
+        "x": 15,
+        "y": 51,
+        "w": 3,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
         {
           "datasource": {
@@ -699,185 +1745,289 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "ts_stream_pid_count{stream=\"$stream\"}",
-          "legendFormat": "{{type}}",
+          "expr": "ts_stream_scte35_break_duration_seconds{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
           "range": true,
-          "refId": "A"
+          "instant": false
         }
       ],
-      "title": "📊 Количество PIDs по типам",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "break_duration из последнего splice_insert out"
     },
     {
+      "id": 39,
+      "type": "stat",
+      "title": "Pre-roll out",
+      "gridPos": {
+        "x": 18,
+        "y": 51,
+        "w": 3,
+        "h": 5
+      },
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "ts_stream_scte35_preroll_seconds{stream=\"$stream\",direction=\"out\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
       "fieldConfig": {
         "defaults": {
+          "unit": "s",
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false
+      },
+      "description": "За сколько до начала блока пришла метка (pre-roll последнего события out)"
+    },
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "Последняя SCTE-35",
+      "gridPos": {
+        "x": 21,
+        "y": 51,
+        "w": 3,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
           },
-          "mappings": [],
+          "editorMode": "code",
+          "expr": "time() - ts_stream_scte35_last_command_timestamp_seconds{stream=\"$stream\"}",
+          "refId": "A",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
-                "value": 0
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
               },
               {
                 "color": "red",
-                "value": 1
+                "value": 300
               }
             ]
-          },
-          "unit": "short"
+          }
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 21
-      },
-      "id": 6,
       "options": {
-        "legend": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "reduceOptions": {
           "calcs": [
-            "last",
-            "max"
+            "lastNotNull"
           ],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "hideZeros": true,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "showPercentChange": false
       },
-      "pluginVersion": "12.2.0",
+      "description": "Сколько секунд назад приходила любая секция SCTE-35 (включая splice_null). Растёт — вставщик молчит"
+    },
+    {
+      "id": 41,
+      "type": "row",
+      "title": "Журнал событий (Loki)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 42,
+      "type": "logs",
+      "title": "События потока",
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 12,
+        "h": 14
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
           },
           "editorMode": "code",
-          "expr": "rate(ts_stream_cc_errors_total{stream=\"$stream\"}[5m]) > 0",
-          "legendFormat": "PID {{pid}}",
-          "range": true,
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind!=\"scte35\"} | json | line_format `{{ if .message }}{{ .message }}{{ else if or (eq .kind \"cc_errors\") (eq .kind \"pids_changed\") (eq .kind \"service_changed\") }}{{ __line__ }}{{ else }}{{ .kind }}{{ if .reason }} ({{ .reason }}){{ end }}{{ if .down_duration_s }} — не было {{ .down_duration_s }} с{{ end }}{{ if .error }}: {{ .error }}{{ end }}{{ if .exits }}, перезапусков {{ .exits }}{{ end }}{{ end }}`",
+          "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "⚠️ CC Errors Rate (только PIDs с ошибками)",
-      "type": "timeseries"
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showCommonLabels": false
+      },
+      "description": "CC-ошибки (начало/конец), смена PID и сервиса, пропадание/возврат потока, перезапуски tsp"
+    },
+    {
+      "id": 43,
+      "type": "logs",
+      "title": "Метки SCTE-35",
+      "gridPos": {
+        "x": 12,
+        "y": 57,
+        "w": 12,
+        "h": 14
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "P8E80F9AEF21F6940"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "P8E80F9AEF21F6940"
+          },
+          "editorMode": "code",
+          "expr": "{job=\"tsmonitor-events\", stream=\"$stream\", kind=\"scte35\"} | json | line_format `{{ if .message }}{{ .message }}{{ else if eq .type \"event\" }}{{ .event_type }} {{ .progress }} id={{ .event_id }} #{{ .count }}{{ if .time_to_event_ms }} — через {{ .time_to_event_ms }} мс{{ end }}{{ if .pre_roll_ms }} — pre-roll {{ .pre_roll_ms }} мс{{ end }}{{ else }}{{ .command }} id={{ .event_id }} out_of_network={{ .out_of_network }}{{ if .break_duration_s }} блок {{ .break_duration_s }} с{{ end }}{{ end }}`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false,
+        "showLabels": false,
+        "showCommonLabels": false
+      },
+      "description": "splice_insert / time_signal и события out/in (pending — анонс, occurred — наступило). splice_null не пишется"
     }
-  ],
-  "preload": false,
-  "refresh": "10s",
-  "schemaVersion": 42,
-  "tags": [
-    "ts-monitoring",
-    "stream-details"
-  ],
-  "templating": {
-    "list": [
-      {
-        "current": {
-          "text": "Prometheus",
-          "value": "PBFA97CFB590B2093"
-        },
-        "includeAll": false,
-        "label": "Data Source",
-        "name": "DS_PROMETHEUS",
-        "options": [],
-        "query": "prometheus",
-        "refresh": 1,
-        "regex": "",
-        "type": "datasource"
-      },
-      {
-        "current": {
-          "text": "233.198.134.118:3333",
-          "value": "233.198.134.118:3333"
-        },
-        "label": "Stream",
-        "name": "stream",
-        "options": [
-          {
-            "selected": true,
-            "text": "233.198.134.118:3333",
-            "value": "233.198.134.118:3333"
-          }
-        ],
-        "query": "233.198.134.118:3333",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "Конгресс ТВ| SCTE-35| HD_ 233.198.134.118_ ID504",
-          "value": "Конгресс ТВ| SCTE-35| HD_ 233.198.134.118_ ID504"
-        },
-        "hide": 2,
-        "label": "Description",
-        "name": "description",
-        "options": [
-          {
-            "selected": true,
-            "text": "Конгресс ТВ| SCTE-35| HD_ 233.198.134.118_ ID504",
-            "value": "Конгресс ТВ| SCTE-35| HD_ 233.198.134.118_ ID504"
-          }
-        ],
-        "query": "Конгресс ТВ| SCTE-35| HD_ 233.198.134.118_ ID504",
-        "type": "textbox"
-      }
-    ]
-  },
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "",
-  "title": "TS Stream Details",
-  "uid": "ts-stream-details",
-  "version": 2
+  ]
 }
