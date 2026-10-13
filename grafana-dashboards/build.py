@@ -380,13 +380,14 @@ def overview():
     ]
 
     # Мозаика: 0 OFFLINE, 1 ONLINE, 2 — online, но были CC-ошибки за 5 минут
+    # sort: OFFLINE первыми, затем ONLINE, CC ERR, НЕСТАБ, ВЫКЛ; instant — без хвостов прошлых состояний
     mosaic = stat("🟩 Статус TS потоков — КЛИКНИТЕ НА КВАДРАТ для деталей", 0, 3, 24, 16, [prom(
-        f"(3 * (ts_stream_flapping{{{JOB}}} == 1)) "
+        f"sort((3 * (ts_stream_flapping{{{JOB}}} == 1)) "
         f"or (ts_stream_status{{{JOB}}} + on(stream) group_left() "
         f"clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])), 1)) "
         f"or ts_stream_status{{{JOB}}} "
-        f"or (ts_stream_enabled{{{JOB}}} == 0) + 4",
-        "{{description}} | {{stream}}")],
+        f"or (ts_stream_enabled{{{JOB}}} == 0) + 4)",
+        "{{description}} | {{stream}}", instant=True)],
         steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3), ("#6e6e6e", 4)], mappings=STATUS_MAPPINGS,
         text_mode="value_and_name",
         desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, "
@@ -501,7 +502,7 @@ def control():
             ("url", "actions", "string")]
     target = {"refId": "A", "datasource": API, "type": "json", "source": "url", "parser": "backend",
               "format": "table", "url": API_URL,
-              "url_options": {"method": "GET", "params": [{"key": "enabled", "value": "$show"}]},
+              "url_options": {"method": "GET", "params": []},
               "root_selector": "streams",
               "columns": [{"selector": s, "text": t, "type": ty} for s, t, ty in cols]}
     t = table("Потоки", 0, 0, 24, 26, [target], desc=(
@@ -542,10 +543,17 @@ def control():
         ])
     order = ["description", "url", "enabled", "online", "disabled_since", "comment", "actions"]
     t["transformations"].append({"id": "organize", "options": {"indexByName": {n: i for i, n in enumerate(order)}}})
+    # Фильтр «Показать»: regex по колонке enabled (.* — все)
+    t["transformations"].insert(0, {"id": "filterByValue", "options": {"type": "include", "match": "any", "filters": [
+        {"fieldName": "enabled", "config": {"id": "regex", "options": {"value": "^(${show:raw})$"}}}]}})
     t["fieldConfig"]["defaults"]["custom"]["filterable"] = True
     t["options"]["footer"] = {"show": True, "reducer": ["count"], "fields": ["description"], "countRows": True}
-    show = {"name": "show", "label": "Показать", "type": "custom", "query": "все : ,выключенные : false,включённые : true",
-            "current": {"text": "все", "value": ""}, "includeAll": False, "multi": False}
+    show = {"name": "show", "label": "Показать", "type": "custom",
+            "query": "все : true|false, выключенные : false, включённые : true",
+            "options": [{"text": "все", "value": "true|false", "selected": True},
+                        {"text": "выключенные", "value": "false", "selected": False},
+                        {"text": "включённые", "value": "true", "selected": False}],
+            "current": {"text": "все", "value": "true|false"}, "includeAll": False, "multi": False}
     return {
         "uid": "ts-stream-control", "title": "TS Stream Monitoring - Управление потоками",
         "tags": ["streams", "ts-monitoring"], "schemaVersion": 42, "refresh": "",

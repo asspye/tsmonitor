@@ -363,11 +363,11 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"} or (ts_stream_enabled{job=\"tsmonitor\"} == 0) + 4",
+          "expr": "sort((3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"} or (ts_stream_enabled{job=\"tsmonitor\"} == 0) + 4)",
           "refId": "A",
           "legendFormat": "{{description}} | {{stream}}",
-          "range": true,
-          "instant": false
+          "range": false,
+          "instant": true
         }
       ],
       "fieldConfig": {

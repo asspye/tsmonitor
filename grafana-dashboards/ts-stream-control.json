@@ -17,10 +17,27 @@
         "name": "show",
         "label": "Показать",
         "type": "custom",
-        "query": "все : ,выключенные : false,включённые : true",
+        "query": "все : true|false, выключенные : false, включённые : true",
+        "options": [
+          {
+            "text": "все",
+            "value": "true|false",
+            "selected": true
+          },
+          {
+            "text": "выключенные",
+            "value": "false",
+            "selected": false
+          },
+          {
+            "text": "включённые",
+            "value": "true",
+            "selected": false
+          }
+        ],
         "current": {
           "text": "все",
-          "value": ""
+          "value": "true|false"
         },
         "includeAll": false,
         "multi": false
@@ -64,12 +81,7 @@
           "url": "http://192.168.1.26:9090/api/v1/streams",
           "url_options": {
             "method": "GET",
-            "params": [
-              {
-                "key": "enabled",
-                "value": "$show"
-              }
-            ]
+            "params": []
           },
           "root_selector": "streams",
           "columns": [
@@ -363,6 +375,24 @@
       },
       "description": "Выключенный поток: tsp остановлен, событий о пропадании нет, в метриках остаётся только ts_stream_enabled = 0, на мозаике — серая плитка ВЫКЛ. config.yaml не меняется, список выключенных хранится в /var/lib/tsmonitor/state.json на 192.168.1.26 и переживает перезапуск. Фильтр по колонке — значок воронки в заголовке.",
       "transformations": [
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "include",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "enabled",
+                "config": {
+                  "id": "regex",
+                  "options": {
+                    "value": "^(${show:raw})$"
+                  }
+                }
+              }
+            ]
+          }
+        },
         {
           "id": "organize",
           "options": {
