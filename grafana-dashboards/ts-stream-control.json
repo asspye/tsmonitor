@@ -374,6 +374,20 @@
             },
             "renameByName": {}
           }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "description": 0,
+              "url": 1,
+              "enabled": 2,
+              "online": 3,
+              "disabled_since": 4,
+              "comment": 5,
+              "actions": 6
+            }
+          }
         }
       ]
     }

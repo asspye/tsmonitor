@@ -540,6 +540,8 @@ def control():
                                     "(${__data.fields.url})?"),
                      ])),
         ])
+    order = ["description", "url", "enabled", "online", "disabled_since", "comment", "actions"]
+    t["transformations"].append({"id": "organize", "options": {"indexByName": {n: i for i, n in enumerate(order)}}})
     t["fieldConfig"]["defaults"]["custom"]["filterable"] = True
     t["options"]["footer"] = {"show": True, "reducer": ["count"], "fields": ["description"], "countRows": True}
     show = {"name": "show", "label": "Показать", "type": "custom", "query": "все : ,выключенные : false,включённые : true",
