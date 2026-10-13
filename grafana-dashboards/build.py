@@ -6,6 +6,8 @@
 
 UID дашбордов прежние: ts-stream-overview (мозаика) и ts-stream-details (поток);
 плитка мозаики ведёт на ts-stream-details?var-stream=…
+ts-stream-control — включение/выключение потоков кнопками (API tsmonitor через
+источник Infinity «tsmonitor-api»); доступ к нему только у Editor и Admin.
 """
 import json
 import os
@@ -18,6 +20,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 PROM = {"type": "prometheus", "uid": "${DS_PROMETHEUS}"}
 LOKI = {"type": "loki", "uid": "P8E80F9AEF21F6940"}
+API = {"type": "yesoreyeram-infinity-datasource", "uid": "tsmonitor-api"}
+API_URL = "http://192.168.1.26:9090/api/v1/streams"
 JOB = 'job="tsmonitor"'
 EVENTS = '{job="tsmonitor-events"'
 
@@ -139,7 +143,8 @@ STATUS_MAPPINGS = [{"type": "value", "options": {
     "0": {"text": "OFFLINE", "color": "red", "index": 0},
     "1": {"text": "ONLINE", "color": "green", "index": 1},
     "2": {"text": "CC ERR", "color": "orange", "index": 2},
-    "3": {"text": "НЕСТАБ", "color": "purple", "index": 3}}}]
+    "3": {"text": "НЕСТАБ", "color": "purple", "index": 3},
+    "4": {"text": "ВЫКЛ", "color": "#6e6e6e", "index": 4}}}]
 
 # Сводка одного события для журнала: сложные (CC, смена PID/сервиса) — строкой JSON целиком
 EVENT_LINE = (
@@ -354,6 +359,7 @@ def overview():
         prom(f"count(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])) > 0) or vector(0)",
              "С CC-ошибками (5 мин)", "D"),
         prom(f"count(ts_stream_flapping{{{JOB}}} == 1) or vector(0)", "Нестабильные", "G"),
+        prom(f"count(ts_stream_enabled{{{JOB}}} == 0) or vector(0)", "Выключены", "H"),
         prom(f"count(ts_stream_scte35_break_active{{{JOB}}} == 1) or vector(0)", "Идёт реклама", "E"),
         prom("sum(increase(ts_host_udp_rcvbuf_errors_total[5m])) or vector(0)", "UDP-потери на сервере (5 мин)", "F"),
     ], text_mode="value_and_name", steps=[("blue", None)]))
@@ -363,6 +369,10 @@ def overview():
         override("С CC-ошибками (5 мин)", ("thresholds", thresholds(("green", None), ("orange", 1)))),
         override("Нестабильные", ("thresholds", thresholds(("green", None), ("purple", 1))),
                  ("description", "Потоки, которые пропадают и возвращаются 3+ раза за 10 минут")),
+        override("Выключены", ("color", {"mode": "fixed", "fixedColor": "#6e6e6e"}),
+                 ("links", [{"title": "Управление потоками", "url": "/d/ts-stream-control"}]),
+                 ("description", "Мониторинг потока выключен через API (дашборд «Управление потоками»); "
+                                 "в «Всего» и «Offline» такие потоки не входят")),
         override("UDP-потери на сервере (5 мин)", ("thresholds", thresholds(("green", None), ("red", 1))),
                  ("decimals", 0),
                  ("description", "Датаграммы, выброшенные ядром 192.168.1.26 из-за переполнения буфера сокета — "
@@ -374,12 +384,13 @@ def overview():
         f"(3 * (ts_stream_flapping{{{JOB}}} == 1)) "
         f"or (ts_stream_status{{{JOB}}} + on(stream) group_left() "
         f"clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])), 1)) "
-        f"or ts_stream_status{{{JOB}}}",
+        f"or ts_stream_status{{{JOB}}} "
+        f"or (ts_stream_enabled{{{JOB}}} == 0) + 4",
         "{{description}} | {{stream}}")],
-        steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3)], mappings=STATUS_MAPPINGS,
+        steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3), ("#6e6e6e", 4)], mappings=STATUS_MAPPINGS,
         text_mode="value_and_name",
         desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, "
-             "то возвращается (3+ раза за 10 мин), красный — offline")
+             "то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен")
     mosaic["fieldConfig"]["defaults"]["links"] = [{
         "title": "${__field.labels.description}", "targetBlank": False,
         "url": "/d/ts-stream-details?var-stream=${__field.labels.stream}"
@@ -471,6 +482,79 @@ def overview():
     }
 
 
+def api_action(title, verb, confirm, variables=None, body="{}"):
+    """Кнопка в таблице: POST в API tsmonitor через Infinity (токен хранится в источнике)"""
+    a = {"type": "infinity", "title": title, "confirmation": confirm, "oneClick": False,
+         "infinity": {"datasourceUid": API["uid"], "method": "POST",
+                      "url": API_URL + "/${__data.fields.url:percentencode}/" + verb,
+                      "body": body, "headers": [["Content-Type", "application/json"]], "queryParams": []}}
+    if variables:
+        a["variables"] = variables
+    return a
+
+
+def control():
+    """Включение/выключение мониторинга потоков без правки config.yaml"""
+    cols = [("description", "description", "string"), ("url", "url", "string"),
+            ("enabled", "enabled", "string"), ("online", "online", "string"),
+            ("disabled_since", "disabled_since", "timestamp"), ("comment", "comment", "string"),
+            ("url", "actions", "string")]
+    target = {"refId": "A", "datasource": API, "type": "json", "source": "url", "parser": "backend",
+              "format": "table", "url": API_URL,
+              "url_options": {"method": "GET", "params": [{"key": "enabled", "value": "$show"}]},
+              "root_selector": "streams",
+              "columns": [{"selector": s, "text": t, "type": ty} for s, t, ty in cols]}
+    t = table("Потоки", 0, 0, 24, 26, [target], desc=(
+        "Выключенный поток: tsp остановлен, событий о пропадании нет, в метриках остаётся только "
+        "ts_stream_enabled = 0, на мозаике — серая плитка ВЫКЛ. config.yaml не меняется, список выключенных "
+        "хранится в /var/lib/tsmonitor/state.json на 192.168.1.26 и переживает перезапуск. "
+        "Фильтр по колонке — значок воронки в заголовке."),
+        sort=("Канал", False),
+        overrides=[
+            override("description", ("displayName", "Канал")),
+            override("url", ("displayName", "IP:Port"), ("custom.width", 190)),
+            override("enabled", ("displayName", "Мониторинг"), ("custom.width", 120),
+                     ("custom.cellOptions", {"type": "color-background"}),
+                     ("mappings", [{"type": "value", "options": {
+                         "true": {"text": "ВКЛ", "color": "green", "index": 0},
+                         "false": {"text": "ВЫКЛ", "color": "#6e6e6e", "index": 1}}}])),
+            override("online", ("displayName", "Поток"), ("custom.width", 100),
+                     ("custom.cellOptions", {"type": "color-text"}),
+                     ("mappings", [{"type": "value", "options": {
+                         "true": {"text": "ONLINE", "color": "green", "index": 0},
+                         "false": {"text": "—", "color": "text", "index": 1}}}])),
+            override("disabled_since", ("displayName", "Выключен с"), ("custom.width", 170),
+                     ("unit", "dateTimeAsLocal")),
+            override("comment", ("displayName", "Комментарий")),
+            override("actions", ("displayName", "Действия"), ("custom.width", 210),
+                     ("custom.cellOptions", {"type": "actions"}),
+                     ("actions", [
+                         api_action("Выключить", "disable",
+                                    "Выключить мониторинг потока ${__data.fields.description} "
+                                    "(${__data.fields.url})? Пропадание потока перестанет отслеживаться.",
+                                    variables=[{"key": "comment", "name": "Комментарий (почему выключаем)",
+                                                "type": "string"}],
+                                    body='{"comment": "$comment"}'),
+                         api_action("Включить", "enable",
+                                    "Включить мониторинг потока ${__data.fields.description} "
+                                    "(${__data.fields.url})?"),
+                     ])),
+        ])
+    t["fieldConfig"]["defaults"]["custom"]["filterable"] = True
+    t["options"]["footer"] = {"show": True, "reducer": ["count"], "fields": ["description"], "countRows": True}
+    show = {"name": "show", "label": "Показать", "type": "custom", "query": "все : ,выключенные : false,включённые : true",
+            "current": {"text": "все", "value": ""}, "includeAll": False, "multi": False}
+    return {
+        "uid": "ts-stream-control", "title": "TS Stream Monitoring - Управление потоками",
+        "tags": ["streams", "ts-monitoring"], "schemaVersion": 42, "refresh": "",
+        "time": {"from": "now-1h", "to": "now"}, "templating": {"list": [show]},
+        "links": [{"title": "Мозаика", "type": "link", "url": "/d/ts-stream-overview"}],
+        "description": "Кнопки «Выключить»/«Включить» вызывают API tsmonitor (192.168.1.26:9090) через источник "
+                       "tsmonitor-api; токен хранится в источнике. Доступ к дашборду — только Editor/Admin.",
+        "panels": [t],
+    }
+
+
 def push(dash, message):
     token = open(TOKEN_FILE).read().strip()
     body = json.dumps({"dashboard": dash, "overwrite": True, "folderUid": "", "message": message}).encode()
@@ -482,14 +566,14 @@ def push(dash, message):
 
 
 def main():
-    dashboards = [overview(), details()]
+    dashboards = [overview(), details(), control()]
     for d in dashboards:
         with open(os.path.join(HERE, d["uid"] + ".json"), "w") as f:
             json.dump(d, f, ensure_ascii=False, indent=2)
             f.write("\n")
     if "--push" in sys.argv:
         for d in dashboards:
-            push(d, "tsmonitor v2: jitter, SCTE-35, event log (build.py)")
+            push(d, "tsmonitor 2.1: streams API — ВЫКЛ on the mosaic, control dashboard (build.py)")
 
 
 if __name__ == "__main__":

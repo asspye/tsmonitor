@@ -1,0 +1,381 @@
+{
+  "uid": "ts-stream-control",
+  "title": "TS Stream Monitoring - Управление потоками",
+  "tags": [
+    "streams",
+    "ts-monitoring"
+  ],
+  "schemaVersion": 42,
+  "refresh": "",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "show",
+        "label": "Показать",
+        "type": "custom",
+        "query": "все : ,выключенные : false,включённые : true",
+        "current": {
+          "text": "все",
+          "value": ""
+        },
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Мозаика",
+      "type": "link",
+      "url": "/d/ts-stream-overview"
+    }
+  ],
+  "description": "Кнопки «Выключить»/«Включить» вызывают API tsmonitor (192.168.1.26:9090) через источник tsmonitor-api; токен хранится в источнике. Доступ к дашборду — только Editor/Admin.",
+  "panels": [
+    {
+      "id": 46,
+      "type": "table",
+      "title": "Потоки",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 26
+      },
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "tsmonitor-api"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "tsmonitor-api"
+          },
+          "type": "json",
+          "source": "url",
+          "parser": "backend",
+          "format": "table",
+          "url": "http://192.168.1.26:9090/api/v1/streams",
+          "url_options": {
+            "method": "GET",
+            "params": [
+              {
+                "key": "enabled",
+                "value": "$show"
+              }
+            ]
+          },
+          "root_selector": "streams",
+          "columns": [
+            {
+              "selector": "description",
+              "text": "description",
+              "type": "string"
+            },
+            {
+              "selector": "url",
+              "text": "url",
+              "type": "string"
+            },
+            {
+              "selector": "enabled",
+              "text": "enabled",
+              "type": "string"
+            },
+            {
+              "selector": "online",
+              "text": "online",
+              "type": "string"
+            },
+            {
+              "selector": "disabled_since",
+              "text": "disabled_since",
+              "type": "timestamp"
+            },
+            {
+              "selector": "comment",
+              "text": "comment",
+              "type": "string"
+            },
+            {
+              "selector": "url",
+              "text": "actions",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "description"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Канал"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "IP:Port"
+              },
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "enabled"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Мониторинг"
+              },
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "true": {
+                        "text": "ВКЛ",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "false": {
+                        "text": "ВЫКЛ",
+                        "color": "#6e6e6e",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "online"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Поток"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "true": {
+                        "text": "ONLINE",
+                        "color": "green",
+                        "index": 0
+                      },
+                      "false": {
+                        "text": "—",
+                        "color": "text",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "disabled_since"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Выключен с"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              },
+              {
+                "id": "unit",
+                "value": "dateTimeAsLocal"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "comment"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Комментарий"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actions"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Действия"
+              },
+              {
+                "id": "custom.width",
+                "value": 210
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "actions"
+                }
+              },
+              {
+                "id": "actions",
+                "value": [
+                  {
+                    "type": "infinity",
+                    "title": "Выключить",
+                    "confirmation": "Выключить мониторинг потока ${__data.fields.description} (${__data.fields.url})? Пропадание потока перестанет отслеживаться.",
+                    "oneClick": false,
+                    "infinity": {
+                      "datasourceUid": "tsmonitor-api",
+                      "method": "POST",
+                      "url": "http://192.168.1.26:9090/api/v1/streams/${__data.fields.url:percentencode}/disable",
+                      "body": "{\"comment\": \"$comment\"}",
+                      "headers": [
+                        [
+                          "Content-Type",
+                          "application/json"
+                        ]
+                      ],
+                      "queryParams": []
+                    },
+                    "variables": [
+                      {
+                        "key": "comment",
+                        "name": "Комментарий (почему выключаем)",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "infinity",
+                    "title": "Включить",
+                    "confirmation": "Включить мониторинг потока ${__data.fields.description} (${__data.fields.url})?",
+                    "oneClick": false,
+                    "infinity": {
+                      "datasourceUid": "tsmonitor-api",
+                      "method": "POST",
+                      "url": "http://192.168.1.26:9090/api/v1/streams/${__data.fields.url:percentencode}/enable",
+                      "body": "{}",
+                      "headers": [
+                        [
+                          "Content-Type",
+                          "application/json"
+                        ]
+                      ],
+                      "queryParams": []
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": true,
+          "reducer": [
+            "count"
+          ],
+          "fields": [
+            "description"
+          ],
+          "countRows": true
+        },
+        "sortBy": [
+          {
+            "displayName": "Канал",
+            "desc": false
+          }
+        ]
+      },
+      "description": "Выключенный поток: tsp остановлен, событий о пропадании нет, в метриках остаётся только ts_stream_enabled = 0, на мозаике — серая плитка ВЫКЛ. config.yaml не меняется, список выключенных хранится в /var/lib/tsmonitor/state.json на 192.168.1.26 и переживает перезапуск. Фильтр по колонке — значок воронки в заголовке.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {}
+          }
+        }
+      ]
+    }
+  ]
+}

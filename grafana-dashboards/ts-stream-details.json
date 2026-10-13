@@ -225,6 +225,11 @@
                   "text": "НЕСТАБ",
                   "color": "purple",
                   "index": 3
+                },
+                "4": {
+                  "text": "ВЫКЛ",
+                  "color": "#6e6e6e",
+                  "index": 4
                 }
               }
             }

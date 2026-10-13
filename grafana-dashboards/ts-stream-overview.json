@@ -125,6 +125,18 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
+          "expr": "count(ts_stream_enabled{job=\"tsmonitor\"} == 0) or vector(0)",
+          "refId": "H",
+          "legendFormat": "Выключены",
+          "range": true,
+          "instant": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
           "expr": "count(ts_stream_scte35_break_active{job=\"tsmonitor\"} == 1) or vector(0)",
           "refId": "E",
           "legendFormat": "Идёт реклама",
@@ -254,6 +266,34 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "Выключены"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6e6e6e"
+                }
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Управление потоками",
+                    "url": "/d/ts-stream-control"
+                  }
+                ]
+              },
+              {
+                "id": "description",
+                "value": "Мониторинг потока выключен через API (дашборд «Управление потоками»); в «Всего» и «Offline» такие потоки не входят"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "UDP-потери на сервере (5 мин)"
             },
             "properties": [
@@ -323,7 +363,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"}",
+          "expr": "(3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"} or (ts_stream_enabled{job=\"tsmonitor\"} == 0) + 4",
           "refId": "A",
           "legendFormat": "{{description}} | {{stream}}",
           "range": true,
@@ -353,6 +393,10 @@
               {
                 "color": "purple",
                 "value": 3
+              },
+              {
+                "color": "#6e6e6e",
+                "value": 4
               }
             ]
           },
@@ -379,6 +423,11 @@
                   "text": "НЕСТАБ",
                   "color": "purple",
                   "index": 3
+                },
+                "4": {
+                  "text": "ВЫКЛ",
+                  "color": "#6e6e6e",
+                  "index": 4
                 }
               }
             }
@@ -409,7 +458,7 @@
         },
         "showPercentChange": false
       },
-      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, то возвращается (3+ раза за 10 мин), красный — offline"
+      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен"
     },
     {
       "id": 3,
