@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,9 +18,13 @@ import (
 //	GET   /api/v1/streams[?enabled=true|false]  список потоков
 //	GET   /api/v1/streams/{url}                 один поток
 //	PATCH /api/v1/streams/{url}                 {"enabled": false, "comment": "…"}
+//	POST  /api/v1/streams/{url}/disable         {"comment": "…"} (тело необязательно)
+//	POST  /api/v1/streams/{url}/enable
+//
+// POST-варианты — для кнопок Grafana (Actions умеют только GET и POST).
 //
 // {url} — url потока из конфига (233.198.134.1:3333); для HLS — с %2F вместо «/».
-// PATCH требует Authorization: Bearer <TSMONITOR_API_TOKEN>.
+// PATCH и POST требуют Authorization: Bearer <TSMONITOR_API_TOKEN>.
 
 // maxBody — предел тела PATCH
 const maxBody = 4 << 10
@@ -45,6 +50,8 @@ func (o *Orchestrator) registerAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/streams", o.handleList)
 	mux.HandleFunc("GET /api/v1/streams/{url}", o.handleGet)
 	mux.HandleFunc("PATCH /api/v1/streams/{url}", o.handlePatch)
+	mux.HandleFunc("POST /api/v1/streams/{url}/disable", o.handleAction(false))
+	mux.HandleFunc("POST /api/v1/streams/{url}/enable", o.handleAction(true))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		apiError(w, http.StatusNotFound, "not_found", "unknown endpoint "+r.Method+" "+r.URL.Path)
 	})
@@ -122,6 +129,40 @@ func (o *Orchestrator) handlePatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, o.info(ch, time.Now()))
+}
+
+type actionBody struct {
+	Comment string `json:"comment"`
+}
+
+// handleAction — POST …/disable и …/enable. Тело {"comment": "…"} необязательно.
+func (o *Orchestrator) handleAction(enabled bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !o.authorized(w, r) {
+			return
+		}
+		ch, ok := o.byURL[r.PathValue("url")]
+		if !ok {
+			apiError(w, http.StatusNotFound, "not_found", errNotFound.Error())
+			return
+		}
+		var b actionBody
+		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&b); err != nil && !errors.Is(err, io.EOF) {
+			apiError(w, http.StatusBadRequest, "invalid_body", "body must be empty or JSON like {\"comment\": \"…\"}: "+err.Error())
+			return
+		}
+		comment := ""
+		if !enabled {
+			comment = strings.TrimSpace(b.Comment)
+		}
+		if err := o.setEnabled(ch, enabled, comment); err != nil {
+			apiError(w, http.StatusInternalServerError, "state_write_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, o.info(ch, time.Now()))
+	}
 }
 
 // setEnabled включает или выключает поток. Сначала сохраняется файл состояния:

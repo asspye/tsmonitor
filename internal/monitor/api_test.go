@@ -182,3 +182,22 @@ func TestAPIErrors(t *testing.T) {
 		t.Fatalf("read-only: %d %v", code, res)
 	}
 }
+
+func TestPOSTActions(t *testing.T) {
+	fakeTSP(t)
+	o, h := newTestOrchestrator(t, "")
+	path := "/api/v1/streams/" + mcast
+
+	code, res := do(t, h, "POST", path+"/disable", token, `{"comment": "из Grafana"}`)
+	if code != http.StatusOK || res["enabled"] != false || res["comment"] != "из Grafana" || running(o, mcast) {
+		t.Fatalf("disable: %d %v", code, res)
+	}
+	code, res = do(t, h, "POST", path+"/enable", token, "")
+	if code != http.StatusOK || res["enabled"] != true || !running(o, mcast) {
+		t.Fatalf("enable: %d %v", code, res)
+	}
+	code, _ = do(t, h, "POST", path+"/disable", "", "")
+	if code != http.StatusUnauthorized || !running(o, mcast) {
+		t.Fatalf("disable without token: %d", code)
+	}
+}

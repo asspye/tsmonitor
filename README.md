@@ -158,6 +158,8 @@ and survives restarts. Streams are identified by their `url` from the config
 | `GET /api/v1/streams` | all streams; `?enabled=false` — only disabled ones |
 | `GET /api/v1/streams/{url}` | one stream |
 | `PATCH /api/v1/streams/{url}` | body `{"enabled": false, "comment": "…"}` or `{"enabled": true}`; needs `Authorization: Bearer $TSMONITOR_API_TOKEN` |
+| `POST /api/v1/streams/{url}/disable` | optional body `{"comment": "…"}`; same as PATCH, for Grafana panel actions (they send only GET/POST) |
+| `POST /api/v1/streams/{url}/enable` | |
 
 ```sh
 curl -s -X PATCH http://192.168.1.26:9090/api/v1/streams/233.198.134.1:3333 \
