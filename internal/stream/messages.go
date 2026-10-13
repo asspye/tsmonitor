@@ -79,6 +79,15 @@ func message(kind string, f eventlog.Fields) string {
 		return fmt.Sprintf("Поток стабилен 10 мин (%s). Был нестабилен %s, пропаданий: %v",
 			state, duration(f["flapping_s"]), f["downs"])
 
+	case KindStreamDisabled:
+		if c, ok := f["comment"].(string); ok && c != "" {
+			return "Мониторинг потока выключен: " + c
+		}
+		return "Мониторинг потока выключен"
+
+	case KindStreamEnabled:
+		return "Мониторинг потока включён"
+
 	case KindTSPExit:
 		return fmt.Sprintf("tsp завершился (%v), перезапусков: %v", f["error"], f["exits"])
 

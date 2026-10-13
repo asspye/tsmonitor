@@ -48,6 +48,7 @@ func TestCollector(t *testing.T) {
 		have[mf.GetName()] = len(mf.GetMetric())
 	}
 	for name, n := range map[string]int{
+		"ts_stream_enabled":                   1,
 		"ts_stream_status":                    1,
 		"ts_stream_bitrate_bps":               2,
 		"ts_stream_pid_count":                 4,
@@ -65,5 +66,35 @@ func TestCollector(t *testing.T) {
 	}
 	if have["ts_stream_cc_errors_total"] < 3 || have["ts_stream_table_interval_seconds"] < 8 {
 		t.Errorf("cc=%d tables=%d", have["ts_stream_cc_errors_total"], have["ts_stream_table_interval_seconds"])
+	}
+}
+
+func TestCollectorDisabledStream(t *testing.T) {
+	on := stream.New("233.1.1.1:1234", "on", 5*time.Second)
+	off := stream.New("233.1.1.2:1234", "off", 5*time.Second)
+	off.Disable("", nil)
+	c := NewCollector([]Source{{State: on}, {State: off}})
+
+	reg := prometheus.NewPedanticRegistry()
+	reg.MustRegister(c)
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mf := range mfs {
+		for _, m := range mf.GetMetric() {
+			var stream string
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "stream" {
+					stream = l.GetValue()
+				}
+			}
+			if stream != "233.1.1.2:1234" {
+				continue
+			}
+			if mf.GetName() != "ts_stream_enabled" || m.GetGauge().GetValue() != 0 {
+				t.Errorf("disabled stream exports %s = %v", mf.GetName(), m)
+			}
+		}
 	}
 }

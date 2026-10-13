@@ -83,6 +83,8 @@ type State struct {
 	exitsSinceLog  int
 	downs          float64 // переходов online → offline
 	flap           flapState
+
+	disabled bool // выключен через API: tsp не запущен, статус не отслеживается
 }
 
 type scteState struct {
@@ -118,6 +120,9 @@ func New(url, description string, interval time.Duration) *State {
 
 // HandleLine разбирает одну строку вывода tsp
 func (s *State) HandleLine(line string, now time.Time, log EventLogger) {
+	if !s.Enabled() {
+		return // последние строки останавливаемого tsp
+	}
 	kind, payload := tsp.Classify(line)
 	switch kind {
 	case tsp.LineAnalyze:

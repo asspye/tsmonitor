@@ -7,6 +7,7 @@ receive_buffer: 8388608     # tsp -I ip --buffer-size, bytes (capped by net.core
 pcr_jitter_max: 5ms         # pcrverify threshold; 0 disables pcrverify
 scte35: true                # run splicemonitor on every stream
 event_log: /var/log/tsmonitor/events.log   # stream events as JSON lines (SCTE-35, CC errors, PID changes, up/down); empty = stdout
+state_file: /var/lib/tsmonitor/state.json  # streams disabled via the API (this config is never rewritten)
 
 streams:
   - url: "233.198.134.1:3333"

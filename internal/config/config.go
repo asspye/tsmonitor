@@ -35,6 +35,14 @@ type Config struct {
 	// смена PID/сервисов, пропадание потока. Пусто — пишем в stdout.
 	EventLog string `yaml:"event_log"`
 
+	// StateFile — JSON с потоками, выключенными через API (сам конфиг
+	// не меняется). Пусто — DefaultStateFile.
+	StateFile string `yaml:"state_file"`
+
+	// APIToken — токен для изменений через API (Authorization: Bearer).
+	// Берётся из окружения TSMONITOR_API_TOKEN; пусто — API только на чтение.
+	APIToken string `yaml:"-"`
+
 	Streams []Stream `yaml:"streams"` // Список потоков для мониторинга
 
 	// Duplicates — потоки с повторным url, пропущенные при валидации
@@ -51,6 +59,7 @@ const (
 	DefaultInterval      = 5 * time.Second
 	DefaultReceiveBuffer = 8 * 1024 * 1024
 	DefaultPCRJitterMax  = 5 * time.Millisecond
+	DefaultStateFile     = "/var/lib/tsmonitor/state.json"
 )
 
 // Load загружает конфигурацию из YAML файла
@@ -64,6 +73,7 @@ func Load(path string) (*Config, error) {
 		Interval:      DefaultInterval,
 		ReceiveBuffer: DefaultReceiveBuffer,
 		PCRJitterMax:  DefaultPCRJitterMax,
+		StateFile:     DefaultStateFile,
 	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)

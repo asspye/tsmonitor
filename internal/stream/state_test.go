@@ -442,3 +442,39 @@ func TestFlappingCollapsed(t *testing.T) {
 	}
 	t.Log(fl[0]["message"], "/", st[0]["message"])
 }
+
+func TestDisabledStreamIsQuiet(t *testing.T) {
+	s := New("x", "x", 5*time.Second)
+	log := &memLog{}
+	t0 := s.created
+	s.HandleLine(report(1000, pidVideo), t0.Add(time.Second), log)
+	s.CheckStatus(t0.Add(2*time.Second), log)
+
+	s.Disable("замена кодера", log)
+	if d := log.kinds(KindStreamDisabled); len(d) != 1 || d[0]["message"] != "Мониторинг потока выключен: замена кодера" {
+		t.Fatalf("disabled = %v", d)
+	}
+	s.HandleLine(report(1000, pidVideo), t0.Add(3*time.Second), log)
+	s.CheckStatus(t0.Add(time.Minute), log)
+	if len(log.kinds(KindStreamDown)) != 0 {
+		t.Fatal("disabled stream must not go down")
+	}
+	if snap := s.Snapshot(t0.Add(3*time.Second), false); snap.Enabled || snap.Online || snap.BitrateTotal != 0 {
+		t.Fatalf("snapshot of disabled stream = %+v", snap)
+	}
+
+	// После включения отсчёт «нет данных» начинается заново
+	t1 := t0.Add(time.Hour)
+	s.Enable(t1, log)
+	if len(log.kinds(KindStreamEnabled)) != 1 {
+		t.Fatal("enable not logged")
+	}
+	s.CheckStatus(t1.Add(5*time.Second), log)
+	if len(log.kinds(KindStreamDown)) != 0 {
+		t.Fatal("down right after enable")
+	}
+	s.CheckStatus(t1.Add(16*time.Second), log)
+	if d := log.kinds(KindStreamDown); len(d) != 1 || d[0]["reason"] != "no data since monitor start" {
+		t.Fatalf("down after enable = %v", d)
+	}
+}

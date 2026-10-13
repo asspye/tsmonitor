@@ -20,6 +20,7 @@ const breakGrace = 30 * time.Second
 type Snapshot struct {
 	URL         string
 	Description string
+	Enabled     bool // false — выключен через API, остальные поля не заполняются
 	Online      bool
 
 	BitrateTotal int64
@@ -64,9 +65,14 @@ func (s *State) Snapshot(now time.Time, pcrMonitored bool) Snapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.disabled {
+		return Snapshot{URL: s.URL, Description: s.Description}
+	}
+
 	stale := staleFactor * s.Interval
 
 	snap := Snapshot{
+		Enabled:         true,
 		URL:             s.URL,
 		Description:     s.Description,
 		Online:          s.onlineLocked(now),

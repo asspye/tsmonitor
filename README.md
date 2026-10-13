@@ -91,6 +91,7 @@ All stream metrics have labels `stream` and `description`.
 
 | Metric | Extra labels | Meaning |
 |---|---|---|
+| `ts_stream_enabled` | | 1 monitored / 0 disabled via the API (a disabled stream exports no other series) |
 | `ts_stream_status` | | 1 online / 0 offline (no analyze report for 3×interval or zero bitrate) |
 | `ts_stream_bitrate_bps` | `type=total\|net` | TS bitrate; net = without null packets |
 | `ts_stream_pid_count` | `type=video\|audio\|data\|other` | elementary streams by type |
@@ -132,6 +133,7 @@ Every record has `time`, `stream`, `description`, `kind` and a human-readable Ru
 | `service_changed` | service name / provider changed |
 | `stream_down` / `stream_up` | stream lost (no data / zero bitrate) and back (`down_duration_s`) |
 | `stream_flapping` / `stream_stable` | 3+ downs in 10 min: one `stream_flapping` (`period_s`) instead of a down/up pair per cycle; CC bursts are not logged either. `stream_stable` after 10 min without transitions (`flapping_s`, `downs`, `state`) |
+| `stream_disabled` / `stream_enabled` | monitoring switched off / on via the API (`comment`) |
 | `tsp_exit` | tsp exited and is restarted (at most once per 10 min per stream, with `exits` count) |
 | `scte35` | SCTE-35 commands (`splice_insert`, `time_signal`, …; `splice_null` heartbeats excluded) and events (`event_type=out\|in`, `progress=pending\|occurred`, `pre_roll_ms`) with the raw splicemonitor JSON in `scte` |
 
@@ -141,6 +143,37 @@ Every record has `time`, `stream`, `description`, `kind` and a human-readable Ru
 ```
 
 Alloy ships it to Loki (`deploy/config.alloy`): labels `job="tsmonitor-events"`, `kind`, `stream`.
+
+## 🔌 Streams API
+
+Switch monitoring of a stream off and on without editing `config.yaml` — e.g. while a channel is off air
+or its encoder is being replaced. A disabled stream has no tsp process, no `stream_down` events and
+exports only `ts_stream_enabled{stream,description} 0`; every other series of it disappears.
+The list of disabled streams is kept in `state_file` (default `/var/lib/tsmonitor/state.json`)
+and survives restarts. Streams are identified by their `url` from the config
+(HLS urls are percent-encoded: `/` → `%2F`). The API listens on `metrics_port`.
+
+| request | |
+|---|---|
+| `GET /api/v1/streams` | all streams; `?enabled=false` — only disabled ones |
+| `GET /api/v1/streams/{url}` | one stream |
+| `PATCH /api/v1/streams/{url}` | body `{"enabled": false, "comment": "…"}` or `{"enabled": true}`; needs `Authorization: Bearer $TSMONITOR_API_TOKEN` |
+
+```sh
+curl -s -X PATCH http://192.168.1.26:9090/api/v1/streams/233.198.134.1:3333 \
+  -H "Authorization: Bearer $TOKEN" -d '{"enabled": false, "comment": "канал на профилактике"}'
+```
+
+```json
+{"url": "233.198.134.1:3333", "description": "…", "enabled": false, "online": false,
+ "disabled_since": "2026-10-13T11:05:00+03:00", "comment": "канал на профилактике"}
+```
+
+Errors are `{"error": {"code": "…", "message": "…"}}`: `400 invalid_body` / `invalid_parameter`,
+`401 unauthorized`, `403 read_only` (no `TSMONITOR_API_TOKEN` — PATCH disabled), `404 not_found`,
+`500 state_write_failed` (state file not writable — nothing is changed).
+The token is read from the environment; the systemd unit loads it from `/etc/tsmonitor/api.env`
+(`TSMONITOR_API_TOKEN=…`, mode 600).
 
 ## 📈 Grafana Dashboards
 

@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultConfigPath = "/etc/tsmonitor/config.yaml"
-	version           = "2.0.0"
+	version           = "2.1.0"
 )
 
 func main() {
@@ -34,6 +34,7 @@ func main() {
 		fmt.Printf("Default config path: %s\n", defaultConfigPath)
 		os.Exit(1)
 	}
+	cfg.APIToken = os.Getenv("TSMONITOR_API_TOKEN")
 
 	fmt.Printf("✅ Config loaded: %d streams\n", cfg.StreamCount())
 	fmt.Printf("   Interface: %s\n", cfg.Interface)
@@ -42,6 +43,12 @@ func main() {
 		cfg.Interval, cfg.ReceiveBuffer, cfg.PCRJitterMax, cfg.SCTE35Enabled())
 	if cfg.EventLog != "" {
 		fmt.Printf("   Event log: %s\n", cfg.EventLog)
+	}
+	fmt.Printf("   State file: %s\n", cfg.StateFile)
+	if cfg.APIToken == "" {
+		fmt.Println("   API: read-only (TSMONITOR_API_TOKEN not set)")
+	} else {
+		fmt.Println("   API: read-write")
 	}
 	for _, d := range cfg.Duplicates {
 		fmt.Printf("⚠️  Duplicate url skipped: %s (%s)\n", d.URL, d.Description)

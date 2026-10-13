@@ -36,6 +36,7 @@ func desc(name, help string, extra ...string) *prometheus.Desc {
 }
 
 var (
+	descEnabled      = desc("ts_stream_enabled", "Stream monitoring enabled (0 = disabled via API: no other series for the stream)")
 	descStatus       = desc("ts_stream_status", "Stream status (1 = online, 0 = offline)")
 	descBitrate      = desc("ts_stream_bitrate_bps", "Stream bitrate in bits per second (net = without null packets)", "type")
 	descPIDCount     = desc("ts_stream_pid_count", "Number of elementary stream PIDs by type", "type")
@@ -71,7 +72,10 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	now := c.now()
 	for _, src := range c.sources {
 		s := src.State.Snapshot(now, src.PCRMonitored)
-		collectStream(ch, &s)
+		gauge(ch, descEnabled, boolValue(s.Enabled), s.URL, s.Description)
+		if s.Enabled {
+			collectStream(ch, &s)
+		}
 	}
 	collectHost(ch)
 }

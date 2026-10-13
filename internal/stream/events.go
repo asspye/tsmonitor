@@ -19,6 +19,8 @@ const (
 	KindTSPExit        = "tsp_exit"
 	KindStreamFlapping = "stream_flapping"
 	KindStreamStable   = "stream_stable"
+	KindStreamDisabled = "stream_disabled"
+	KindStreamEnabled  = "stream_enabled"
 )
 
 // confirmReports — сколько отчётов подряд новый состав PID/сервисов должен
@@ -268,6 +270,10 @@ type flapState struct {
 // CheckStatus логирует переходы online ↔ offline. Вызывается периодически.
 func (s *State) CheckStatus(now time.Time, log EventLogger) {
 	s.mu.Lock()
+	if s.disabled {
+		s.mu.Unlock()
+		return
+	}
 	online := s.onlineLocked(now)
 	fl := &s.flap
 	var events []event

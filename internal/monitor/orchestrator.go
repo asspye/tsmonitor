@@ -12,6 +12,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/otcnet/tsmonitor/internal/config"
+	"github.com/otcnet/tsmonitor/internal/control"
 	"github.com/otcnet/tsmonitor/internal/eventlog"
 	"github.com/otcnet/tsmonitor/internal/metrics"
 	"github.com/otcnet/tsmonitor/internal/stream"
@@ -23,28 +24,56 @@ const startStagger = 20 * time.Millisecond
 
 // Orchestrator запускает tsp для каждого потока и отдаёт метрики
 type Orchestrator struct {
-	config  *config.Config
-	states  []*stream.State
-	sources []metrics.Source
-	events  *eventlog.Logger
-	server  *http.Server
-	wg      sync.WaitGroup
+	config   *config.Config
+	states   []*stream.State
+	sources  []metrics.Source
+	channels []*channel
+	byURL    map[string]*channel
+	control  *control.Store
+	events   *eventlog.Logger
+	server   *http.Server
+	ctx      context.Context // контекст Start: запущенные через API tsp живут до его отмены
+	wg       sync.WaitGroup
+}
+
+// channel — поток и его процесс tsp. mu сериализует включение/выключение.
+type channel struct {
+	state *stream.State
+
+	mu     sync.Mutex
+	cancel context.CancelFunc // nil — tsp не запущен
+	done   chan struct{}      // закрывается, когда Runner.Run вернулся
 }
 
 // NewOrchestrator создаёт orchestrator
 func NewOrchestrator(cfg *config.Config) (*Orchestrator, error) {
+	store, err := control.Open(cfg.StateFile)
+	if err != nil {
+		return nil, err
+	}
 	events, err := eventlog.Open(cfg.EventLog)
 	if err != nil {
 		return nil, err
 	}
-	o := &Orchestrator{config: cfg, events: events}
+	o := &Orchestrator{config: cfg, events: events, control: store, byURL: map[string]*channel{}}
+	disabled := 0
 	for _, s := range cfg.Streams {
 		st := stream.New(s.URL, s.Description, cfg.Interval)
+		if e, ok := store.Disabled(s.URL); ok {
+			st.Disable(e.Comment, nil)
+			disabled++
+		}
+		ch := &channel{state: st}
+		o.channels = append(o.channels, ch)
+		o.byURL[s.URL] = ch
 		o.states = append(o.states, st)
 		o.sources = append(o.sources, metrics.Source{
 			State:        st,
 			PCRMonitored: cfg.PCRJitterMax > 0 && !tsp.IsHLS(s.URL),
 		})
+	}
+	if disabled > 0 {
+		fmt.Printf("⏸️  Disabled via API: %d streams\n", disabled)
 	}
 	return o, nil
 }
@@ -55,6 +84,7 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to register metrics: %w", err)
 	}
 
+	o.ctx = ctx
 	if err := o.startMetricsServer(); err != nil {
 		return err
 	}
@@ -68,15 +98,19 @@ func (o *Orchestrator) Start(ctx context.Context) error {
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
-		for _, st := range o.states {
-			o.startStream(ctx, st)
+		for _, ch := range o.channels {
+			ch.mu.Lock()
+			if ch.state.Enabled() {
+				o.startStream(ch)
+			}
+			ch.mu.Unlock()
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(startStagger):
 			}
 		}
-		fmt.Printf("✅ Started monitoring %d streams\n", len(o.states))
+		fmt.Printf("✅ Started monitoring %d streams\n", len(o.channels))
 	}()
 
 	fmt.Printf("📊 Metrics available at http://0.0.0.0:%d/metrics\n", o.config.MetricsPort)
@@ -99,7 +133,12 @@ func (o *Orchestrator) watchStatus(ctx context.Context) {
 	}
 }
 
-func (o *Orchestrator) startStream(ctx context.Context, st *stream.State) {
+// startStream запускает tsp потока; ch.mu захвачен
+func (o *Orchestrator) startStream(ch *channel) {
+	if ch.cancel != nil || o.ctx.Err() != nil {
+		return
+	}
+	st := ch.state
 	r := &tsp.Runner{
 		Opts: tsp.Options{
 			LocalAddress:  o.config.Interface,
@@ -117,11 +156,26 @@ func (o *Orchestrator) startStream(ctx context.Context, st *stream.State) {
 			fmt.Printf("[%s] %v, restarting\n", st.URL, err)
 		},
 	}
+	ctx, cancel := context.WithCancel(o.ctx)
+	done := make(chan struct{})
+	ch.cancel, ch.done = cancel, done
 	o.wg.Add(1)
 	go func() {
 		defer o.wg.Done()
+		defer close(done)
 		r.Run(ctx)
 	}()
+}
+
+// stopStream останавливает tsp потока и ждёт его завершения; ch.mu захвачен.
+// Runner убивает tsp, если тот не вышел за StopTimeout, так что ожидание ограничено.
+func (o *Orchestrator) stopStream(ch *channel) {
+	if ch.cancel == nil {
+		return
+	}
+	ch.cancel()
+	<-ch.done
+	ch.cancel, ch.done = nil, nil
 }
 
 func (o *Orchestrator) startMetricsServer() error {
@@ -131,11 +185,13 @@ func (o *Orchestrator) startMetricsServer() error {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintf(w, "OK\n")
 	})
+	o.registerAPI(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, "<html><body><h1>TSMonitor</h1><p>Monitoring %d streams</p>", len(o.states))
 		fmt.Fprintf(w, "<ul><li><a href='/metrics'>/metrics</a> - Prometheus metrics</li>")
-		fmt.Fprintf(w, "<li><a href='/health'>/health</a> - Health check</li></ul></body></html>")
+		fmt.Fprintf(w, "<li><a href='/health'>/health</a> - Health check</li>")
+		fmt.Fprintf(w, "<li><a href='/api/v1/streams'>/api/v1/streams</a> - Streams API</li></ul></body></html>")
 	})
 
 	// Слушаем порт сразу: если он занят, сервис должен упасть, а не работать без /metrics
@@ -155,12 +211,13 @@ func (o *Orchestrator) startMetricsServer() error {
 // Stop ждёт остановки всех tsp (ctx уже отменён вызывающим) и закрывает ресурсы
 func (o *Orchestrator) Stop() {
 	fmt.Println("🛑 Stopping all runners...")
-	o.wg.Wait()
+	// Сначала HTTP: запрос к API не должен запускать tsp, пока ждём остальные
 	if o.server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		o.server.Shutdown(ctx)
 		cancel()
 	}
+	o.wg.Wait()
 	o.events.Close()
 	fmt.Println("✅ All runners stopped")
 }
