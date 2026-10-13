@@ -380,22 +380,34 @@ def overview():
     ]
 
     # Мозаика: 0 OFFLINE, 1 ONLINE, 2 — online, но были CC-ошибки за 5 минут
-    # sort: OFFLINE первыми, затем ONLINE, CC ERR, НЕСТАБ, ВЫКЛ; instant — без хвостов прошлых состояний
-    mosaic = stat("🟩 Статус TS потоков — КЛИКНИТЕ НА КВАДРАТ для деталей", 0, 3, 24, 16, [prom(
-        f"sort((3 * (ts_stream_flapping{{{JOB}}} == 1)) "
-        f"or (ts_stream_status{{{JOB}}} + on(stream) group_left() "
-        f"clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])), 1)) "
-        f"or ts_stream_status{{{JOB}}} "
-        f"or (ts_stream_enabled{{{JOB}}} == 0) + 4)",
-        "{{description}} | {{stream}}", instant=True)],
-        steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3), ("#6e6e6e", 4)], mappings=STATUS_MAPPINGS,
-        text_mode="value_and_name",
-        desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, "
-             "то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен")
-    mosaic["fieldConfig"]["defaults"]["links"] = [{
-        "title": "${__field.labels.description}", "targetBlank": False,
-        "url": "/d/ts-stream-details?var-stream=${__field.labels.stream}"
-               "&var-description=${__field.labels.description}&from=now-6h&to=now"}]
+    # Порядок плиток: OFFLINE первыми, затем все работающие по названию (CC ERR и НЕСТАБ остаются
+    # на своём месте среди ONLINE), ВЫКЛ в конце. Ключ сортировки key = группа|название|адрес,
+    # строки таблицы сортирует трансформация sortBy. instant — только текущее состояние.
+    def branch(expr, grp):
+        return f'label_replace(max by (stream, description) ({expr}), "grp", "{grp}", "", "")'
+    cc5 = f"clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{{{JOB}}}[5m])), 1)"
+    mosaic_expr = "label_join(" + " or ".join([
+        branch(f"3 * (ts_stream_flapping{{{JOB}}} == 1)", 1),
+        branch(f"(ts_stream_status{{{JOB}}} == 0) unless on(stream) (ts_stream_flapping{{{JOB}}} == 1)", 0),
+        branch(f"(ts_stream_status{{{JOB}}} == 1) + on(stream) group_left() {cc5}", 1),
+        branch(f"ts_stream_status{{{JOB}}} == 1", 1),
+        branch(f"(ts_stream_enabled{{{JOB}}} == 0) + 4", 2),
+    ]) + ', "key", "|", "grp", "description", "stream")'
+    mosaic = stat("🟩 Статус TS потоков — КЛИКНИТЕ НА КВАДРАТ для деталей", 0, 3, 24, 16,
+                  [prom(mosaic_expr, instant=True, fmt="table")],
+                  steps=[("red", None), ("green", 1), ("orange", 2), ("purple", 3), ("#6e6e6e", 4)],
+                  mappings=STATUS_MAPPINGS, text_mode="value_and_name",
+                  desc="Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, "
+                       "то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен. "
+                       "Порядок: OFFLINE, затем все работающие по названию, ВЫКЛ в конце")
+    mosaic["transformations"] = [{"id": "sortBy", "options": {"fields": {}, "sort": [{"field": "key", "desc": False}]}}]
+    mosaic["options"]["reduceOptions"] = {"values": True, "calcs": ["lastNotNull"], "fields": "", "limit": 5000}
+    d = mosaic["fieldConfig"]["defaults"]
+    d["displayName"] = "${__data.fields.description} | ${__data.fields.stream}"
+    d["links"] = [{
+        "title": "${__data.fields.description}", "targetBlank": False,
+        "url": "/d/ts-stream-details?var-stream=${__data.fields.stream}"
+               "&var-description=${__data.fields.description}&from=now-6h&to=now"}]
     P.append(mosaic)
 
     offline = row("🔴 OFFLINE потоки (кликните чтобы развернуть)", 19, collapsed=True)

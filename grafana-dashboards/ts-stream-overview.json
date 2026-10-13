@@ -363,11 +363,12 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sort((3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)) or (ts_stream_status{job=\"tsmonitor\"} + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)) or ts_stream_status{job=\"tsmonitor\"} or (ts_stream_enabled{job=\"tsmonitor\"} == 0) + 4)",
+          "expr": "label_join(label_replace(max by (stream, description) (3 * (ts_stream_flapping{job=\"tsmonitor\"} == 1)), \"grp\", \"1\", \"\", \"\") or label_replace(max by (stream, description) ((ts_stream_status{job=\"tsmonitor\"} == 0) unless on(stream) (ts_stream_flapping{job=\"tsmonitor\"} == 1)), \"grp\", \"0\", \"\", \"\") or label_replace(max by (stream, description) ((ts_stream_status{job=\"tsmonitor\"} == 1) + on(stream) group_left() clamp_max(sum by (stream) (increase(ts_stream_cc_errors_total{job=\"tsmonitor\"}[5m])), 1)), \"grp\", \"1\", \"\", \"\") or label_replace(max by (stream, description) (ts_stream_status{job=\"tsmonitor\"} == 1), \"grp\", \"1\", \"\", \"\") or label_replace(max by (stream, description) ((ts_stream_enabled{job=\"tsmonitor\"} == 0) + 4), \"grp\", \"2\", \"\", \"\"), \"key\", \"|\", \"grp\", \"description\", \"stream\")",
           "refId": "A",
-          "legendFormat": "{{description}} | {{stream}}",
+          "legendFormat": "__auto",
           "range": false,
-          "instant": true
+          "instant": true,
+          "format": "table"
         }
       ],
       "fieldConfig": {
@@ -432,11 +433,12 @@
               }
             }
           ],
+          "displayName": "${__data.fields.description} | ${__data.fields.stream}",
           "links": [
             {
-              "title": "${__field.labels.description}",
+              "title": "${__data.fields.description}",
               "targetBlank": false,
-              "url": "/d/ts-stream-details?var-stream=${__field.labels.stream}&var-description=${__field.labels.description}&from=now-6h&to=now"
+              "url": "/d/ts-stream-details?var-stream=${__data.fields.stream}&var-description=${__data.fields.description}&from=now-6h&to=now"
             }
           ]
         },
@@ -450,15 +452,30 @@
         "textMode": "value_and_name",
         "wideLayout": true,
         "reduceOptions": {
+          "values": true,
           "calcs": [
             "lastNotNull"
           ],
           "fields": "",
-          "values": false
+          "limit": 5000
         },
         "showPercentChange": false
       },
-      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен"
+      "description": "Зелёный — online, оранжевый — online, но за 5 минут были CC-ошибки, фиолетовый — поток то пропадает, то возвращается (3+ раза за 10 мин), красный — offline, серый ВЫКЛ — мониторинг потока выключен. Порядок: OFFLINE, затем все работающие по названию, ВЫКЛ в конце",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "key",
+                "desc": false
+              }
+            ]
+          }
+        }
+      ]
     },
     {
       "id": 3,
