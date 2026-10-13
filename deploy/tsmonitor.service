@@ -15,7 +15,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 LogsDirectory=tsmonitor
 # /var/lib/tsmonitor/state.json — streams disabled via the API (config.yaml is not touched)
 StateDirectory=tsmonitor
-# TSMONITOR_API_TOKEN=… enables PATCH /api/v1/streams/{url}; without the file the API is read-only
+# TSMONITOR_API_TOKEN=… enables PATCH/POST of /api/v1/streams; without the file the API is read-only
 EnvironmentFile=-/etc/tsmonitor/api.env
 Restart=always
 RestartSec=5
